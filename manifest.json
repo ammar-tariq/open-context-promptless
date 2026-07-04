@@ -1,7 +1,7 @@
 {
   "name": "OpenContext - PromptLess",
-  "id": "opencontext-promptless-ai-context-exporter",
-  "api": "0.1.0",
+  "id": "1655373534068693960",
+  "api": "1.0.0",
   "main": "dist/code.js",
   "ui": "dist/ui.html",
   "editorType": ["figma"],
