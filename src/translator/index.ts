@@ -1,11 +1,16 @@
+import type { ExportTargetId } from '@/constants/export-targets';
 import type { ParsedDesign, ParsedNode, ParsedScreen, TypographyStyle } from '@/types';
 import type { SemanticDesign, SemanticNode, SemanticTextContent } from '@/types/semantic';
 
 /**
  * Translates parsed Figma data into a semantic, framework-agnostic representation.
  */
-export function translateDesign(parsed: ParsedDesign): SemanticDesign {
+export function translateDesign(
+  parsed: ParsedDesign,
+  exportTargetId: ExportTargetId = 'generic',
+): SemanticDesign {
   return {
+    exportTarget: exportTargetId,
     project: {
       name: parsed.projectName,
       exportedAt: parsed.exportedAt,
@@ -17,6 +22,10 @@ export function translateDesign(parsed: ParsedDesign): SemanticDesign {
       exportedFrom: 'OpenContext Figma Plugin',
     },
     screens: parsed.screens.map(translateScreen),
+    navigation: {
+      links: parsed.navigation.links.map((link) => ({ ...link })),
+      linkCount: parsed.navigation.linkCount,
+    },
     components: parsed.components.map((component) => ({
       id: component.id,
       name: component.name,
@@ -55,6 +64,7 @@ export function translateDesign(parsed: ParsedDesign): SemanticDesign {
       exportedAssetCount: countExportedAssets(parsed.images, parsed.icons),
       textElementCount: parsed.metadata.textElementCount,
       nodeCount: parsed.metadata.nodeCount,
+      navigationLinkCount: parsed.navigation.linkCount,
     },
   };
 }

@@ -1,4 +1,6 @@
 import { create } from 'zustand';
+import type { ExportTargetId } from '@/constants/export-targets';
+import { DEFAULT_EXPORT_TARGET } from '@/constants/export-targets';
 import type { ExportSummary } from '@/types';
 import type { GenerateErrorPayload, SelectedNodeSummary } from '@/types/messages';
 
@@ -6,6 +8,7 @@ export type UiStatus = 'idle' | 'loading' | 'success' | 'error';
 
 interface PluginState {
   projectName: string;
+  exportTarget: ExportTargetId;
   selectionCount: number;
   exportableCount: number;
   selectionNames: string[];
@@ -16,6 +19,7 @@ interface PluginState {
   summary: ExportSummary | null;
   error: GenerateErrorPayload | null;
   setProjectName: (name: string) => void;
+  setExportTarget: (exportTarget: ExportTargetId) => void;
   setInitState: (payload: {
     selectionCount: number;
     exportableCount: number;
@@ -32,6 +36,7 @@ interface PluginState {
 
 export const usePluginStore = create<PluginState>((set) => ({
   projectName: '',
+  exportTarget: DEFAULT_EXPORT_TARGET,
   selectionCount: 0,
   exportableCount: 0,
   selectionNames: [],
@@ -42,6 +47,7 @@ export const usePluginStore = create<PluginState>((set) => ({
   summary: null,
   error: null,
   setProjectName: (projectName) => set({ projectName }),
+  setExportTarget: (exportTarget) => set({ exportTarget }),
   setInitState: ({
     selectionCount,
     exportableCount,

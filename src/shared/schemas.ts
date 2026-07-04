@@ -61,7 +61,22 @@ const semanticNodeSchema: z.ZodType<Record<string, unknown>> = z.lazy(() =>
   }),
 );
 
+const navigationLinkSchema = z.object({
+  id: z.string(),
+  sourceScreenId: z.string(),
+  sourceScreenName: z.string(),
+  sourceNodeId: z.string(),
+  sourceNodeName: z.string(),
+  trigger: z.record(z.unknown()),
+  navigation: z.string(),
+  destinationScreenId: z.string().nullable(),
+  destinationScreenName: z.string().nullable(),
+  destinationNodeId: z.string().nullable(),
+  transition: z.record(z.unknown()).nullable(),
+});
+
 export const contextDataSchema = z.object({
+  exportTarget: z.string(),
   project: z.object({
     name: z.string().min(1),
     exportedAt: z.string(),
@@ -69,6 +84,11 @@ export const contextDataSchema = z.object({
   }),
   metadata: z.record(z.unknown()),
   screens: z.array(semanticNodeSchema),
+  navigation: z.object({
+    links: z.array(navigationLinkSchema),
+    linkCount: z.number().int().nonnegative(),
+  }),
+  platform: z.record(z.unknown()).optional(),
   components: z.array(z.record(z.unknown())),
   tokens: z.object({
     colors: z.array(z.record(z.unknown())),
@@ -88,6 +108,7 @@ export const contextDataSchema = z.object({
     exportedAssetCount: z.number().int().nonnegative().optional(),
     textElementCount: z.number().int().nonnegative(),
     nodeCount: z.number().int().nonnegative(),
+    navigationLinkCount: z.number().int().nonnegative().optional(),
   }),
 });
 

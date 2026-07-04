@@ -3,7 +3,9 @@ export const PLUGIN_VERSION = '1.0.0';
 export const CONTEXT_FOLDER_NAME = 'context';
 
 export const UI_WIDTH = 360;
-export const UI_HEIGHT = 480;
+export const UI_HEIGHT = 540;
+
+export * from './export-targets';
 
 export const SUPPORTED_TOP_LEVEL_NODE_TYPES = ['FRAME', 'COMPONENT', 'INSTANCE', 'SECTION'] as const;
 
@@ -31,6 +33,7 @@ export const SEMANTIC_NODE_TYPES = [
 export const EXPORT_FILE_NAMES = {
   README: 'README.md',
   DATA: 'data.json',
+  NAVIGATION_NOTES: 'navigation-notes.md',
 } as const;
 
 export * from './assets';

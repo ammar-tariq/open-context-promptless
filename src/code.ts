@@ -1,3 +1,4 @@
+import type { ExportTargetId } from '@/constants/export-targets';
 import { UI_HEIGHT, UI_WIDTH } from '@/constants';
 import { createMessage } from '@/types/messages';
 import type { GenerateErrorPayload, PluginMessage } from '@/types/messages';
@@ -78,17 +79,29 @@ figma.ui.onmessage = async (message: PluginMessage) => {
     }
 
     case 'GENERATE_CONTEXT': {
-      const payload = message.payload as { projectName?: string } | undefined;
+      const payload = message.payload as
+        | { projectName?: string; exportTarget?: string }
+        | undefined;
       const projectName = payload?.projectName;
+      const exportTarget = payload?.exportTarget ?? 'generic';
       if (!projectName || typeof projectName !== 'string') {
         postExportError(new ExportError('Project name is required.', 'INVALID_PROJECT_NAME'));
         break;
       }
 
+      if (typeof exportTarget !== 'string') {
+        postExportError(new ExportError('Export target is required.', 'INVALID_EXPORT_TARGET'));
+        break;
+      }
+
       try {
-        const result = await generateContextPackage(projectName, (stage, progress) => {
-          postToUi(createMessage('GENERATE_PROGRESS', { stage, progress }));
-        });
+        const result = await generateContextPackage(
+          projectName,
+          exportTarget as ExportTargetId,
+          (stage, progress) => {
+            postToUi(createMessage('GENERATE_PROGRESS', { stage, progress }));
+          },
+        );
 
         postToUi(
           createMessage('GENERATE_SUCCESS', {

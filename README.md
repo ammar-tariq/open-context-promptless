@@ -7,10 +7,14 @@ This project exports **design context**, not application code.
 ## Features
 
 - Select one or more top-level frames, sections, components, or instances
+- Choose an export target: **General** (default) or **React Native** (with React Navigation notes)
 - Parse Figma nodes into a normalized, semantic data model
+- Export prototype screen-to-screen links from Figma interactions
 - Export a `context/` folder containing:
   - `README.md` — human-readable export summary
-  - `data.json` — structured semantic design data
+  - `data.json` — structured semantic design data with navigation links
+  - `navigation-notes.md` — React Navigation setup guide (React Native target)
+  - `assets/images/` and `assets/icons/` — exported raster and vector assets
 
 ## Tech Stack
 
@@ -105,10 +109,14 @@ Future exporters (Markdown, assets, platform-specific generators) can be added w
 ```text
 context/
 ├── README.md
-└── data.json
+├── data.json
+├── navigation-notes.md   (React Native target)
+└── assets/
+    ├── images/
+    └── icons/
 ```
 
-`data.json` includes project metadata, screens, layout hierarchy, components, typography, colors, spacing, assets, and summary counts using semantic naming — not framework-specific types.
+`data.json` includes project metadata, screens, layout hierarchy, components, typography, colors, spacing, assets, prototype navigation links, platform notes, and summary counts using semantic naming — not framework-specific types.
 
 ## License
 

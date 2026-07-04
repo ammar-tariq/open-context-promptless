@@ -1,3 +1,4 @@
+import type { ParsedNavigation } from './navigation';
 import type { SemanticNodeType } from './semantic';
 
 export interface Dimensions {
@@ -188,6 +189,7 @@ export interface ParsedDesign {
   typography: TypographyStyle[];
   images: AssetReference[];
   icons: AssetReference[];
+  navigation: ParsedNavigation;
   metadata: DesignMetadata;
 }
 
@@ -227,8 +229,10 @@ export interface ExportSummary {
   iconCount: number;
   exportedAssetCount: number;
   skippedAssetCount: number;
+  navigationLinkCount: number;
   textElementCount: number;
 }
 
+export * from './navigation';
 export * from './semantic';
 export * from './messages';

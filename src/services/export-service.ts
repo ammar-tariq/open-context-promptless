@@ -1,7 +1,9 @@
+import type { ExportTargetId } from '@/constants/export-targets';
 import type { ExportSummary, ParsedDesign } from '@/types';
 import { validateProjectName } from '@/shared/schemas';
 import { exportContextPackage } from '@/exporters';
 import { parseDesign } from '@/parser';
+import { validateExportTargetId } from '@/platforms';
 import { ExportLikeError, extractErrorDetails } from '@/utils/error-details';
 import { exportDesignAssets, enrichDesignWithAssetPaths } from './asset-export-service';
 import { createContextZipBase64, getContextZipFileName } from './zip-service';
@@ -30,10 +32,12 @@ export interface ExportProgressHandler {
  */
 export async function generateContextPackage(
   projectName: string,
+  exportTargetId: ExportTargetId,
   onProgress?: ExportProgressHandler,
 ): Promise<ExportResult> {
   try {
     const normalizedName = validateProjectName(projectName);
+    const normalizedTarget = validateExportTargetId(exportTargetId);
     onProgress?.('Reading selection', 0.05);
 
     const nodes = getSelectedExportNodes();
@@ -57,7 +61,7 @@ export async function generateContextPackage(
     );
 
     onProgress?.('Building context package', 0.96);
-    const contextPackage = exportContextPackage(enrichedDesign);
+    const contextPackage = exportContextPackage(enrichedDesign, normalizedTarget);
     contextPackage.files.push(...assetResult.files);
 
     if (contextPackage.files.length === 0) {
@@ -80,6 +84,7 @@ export async function generateContextPackage(
         iconCount: enrichedDesign.icons.length,
         exportedAssetCount: assetResult.exportedAssetCount,
         skippedAssetCount: assetResult.skippedAssets.length,
+        navigationLinkCount: enrichedDesign.navigation.linkCount,
         textElementCount: enrichedDesign.metadata.textElementCount,
       },
     };

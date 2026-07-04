@@ -1,3 +1,4 @@
+import type { ExportTargetId } from '@/constants/export-targets';
 import type { ExportSummary } from './index';
 
 export type PluginMessageType =
@@ -25,6 +26,7 @@ export interface InitResponsePayload {
 
 export interface GenerateContextPayload {
   projectName: string;
+  exportTarget: ExportTargetId;
 }
 
 export interface GenerateProgressPayload {

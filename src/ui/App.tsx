@@ -1,4 +1,4 @@
-import { PLUGIN_NAME, PLUGIN_VERSION } from '@/constants';
+import { PLUGIN_NAME, PLUGIN_VERSION, SELECTABLE_EXPORT_TARGETS } from '@/constants';
 import { usePluginStore } from '@/ui/store/plugin-store';
 import {
   usePluginMessaging,
@@ -89,6 +89,7 @@ function StatusMessage() {
           <li>{summary.imageCount} images</li>
           <li>{summary.iconCount} icons</li>
           <li>{summary.exportedAssetCount} exported asset files</li>
+          <li>{summary.navigationLinkCount} prototype links</li>
           {summary.skippedAssetCount > 0 ? (
             <li>{summary.skippedAssetCount} assets skipped (see plugin console)</li>
           ) : null}
@@ -125,9 +126,11 @@ export function App() {
   usePluginMessaging();
 
   const projectName = usePluginStore((state) => state.projectName);
+  const exportTarget = usePluginStore((state) => state.exportTarget);
   const exportableCount = usePluginStore((state) => state.exportableCount);
   const status = usePluginStore((state) => state.status);
   const setProjectName = usePluginStore((state) => state.setProjectName);
+  const setExportTarget = usePluginStore((state) => state.setExportTarget);
   const setLoading = usePluginStore((state) => state.setLoading);
 
   const isGenerating = status === 'loading';
@@ -139,6 +142,7 @@ export function App() {
     postPluginMessage(
       createMessage('GENERATE_CONTEXT', {
         projectName: projectName.trim(),
+        exportTarget,
       }),
     );
   };
@@ -166,6 +170,25 @@ export function App() {
         </button>
 
         <label className="field">
+          <span className="field__label">Export target</span>
+          <select
+            className="field__input field__select"
+            value={exportTarget}
+            disabled={isGenerating}
+            onChange={(event) => setExportTarget(event.target.value as typeof exportTarget)}
+          >
+            {SELECTABLE_EXPORT_TARGETS.map((target) => (
+              <option key={target.id} value={target.id}>
+                {target.label}
+              </option>
+            ))}
+          </select>
+          <span className="field__hint">
+            {SELECTABLE_EXPORT_TARGETS.find((target) => target.id === exportTarget)?.description}
+          </span>
+        </label>
+
+        <label className="field">
           <span className="field__label">Project name</span>
           <input
             className="field__input"
@@ -191,7 +214,8 @@ export function App() {
       </main>
 
       <footer className="footer">
-        Exports a <code>context/</code> folder with README and structured JSON.
+        Exports a <code>context/</code> folder with README, structured JSON, navigation links, and
+        optional platform notes.
       </footer>
     </div>
   );

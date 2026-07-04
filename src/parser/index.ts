@@ -22,6 +22,7 @@ import type {
 } from '@/types';
 import { PLUGIN_VERSION } from '@/constants';
 import { formatExportDate, getBoundVariables, hasVisibleContent, rgbToColorValue } from '@/utils';
+import { collectNavigationLinks } from './navigation';
 
 export interface ParseOptions {
   projectName: string;
@@ -77,6 +78,9 @@ export async function parseDesign(
 
   onProgress?.('Collecting metadata', 0.9);
 
+  onProgress?.('Collecting prototype navigation', 0.88);
+  const navigation = await collectNavigationLinks(screens, nodes);
+
   const metadata = buildMetadata(screens, componentMap, imageMap);
 
   return {
@@ -89,6 +93,7 @@ export async function parseDesign(
     typography: Array.from(typographyMap.values()),
     images: Array.from(imageMap.values()),
     icons: Array.from(iconMap.values()),
+    navigation,
     metadata,
   };
 }

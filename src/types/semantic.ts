@@ -56,6 +56,7 @@ export interface SemanticTextContent {
 }
 
 export interface SemanticDesign {
+  exportTarget: string;
   project: {
     name: string;
     exportedAt: string;
@@ -63,6 +64,11 @@ export interface SemanticDesign {
   };
   metadata: Record<string, unknown>;
   screens: SemanticNode[];
+  navigation: {
+    links: Record<string, unknown>[];
+    linkCount: number;
+  };
+  platform?: Record<string, unknown>;
   components: Record<string, unknown>[];
   tokens: {
     colors: Record<string, unknown>[];
@@ -82,5 +88,6 @@ export interface SemanticDesign {
     exportedAssetCount: number;
     textElementCount: number;
     nodeCount: number;
+    navigationLinkCount: number;
   };
 }
