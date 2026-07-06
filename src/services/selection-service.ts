@@ -1,5 +1,8 @@
 import { SUPPORTED_TOP_LEVEL_NODE_TYPES } from '@/constants';
 import { hasVisibleContent } from '@/utils';
+import { countFigmaNodes } from '@/services/variant-resolution-service';
+import { findDuplicateScreenGroups } from '@/services/variant-resolution-service';
+import { normalizeScreenName } from '@/utils/screen-slug';
 
 export class SelectionError extends Error {
   constructor(
@@ -16,6 +19,8 @@ export interface ScreenSummary {
   name: string;
   type: string;
   empty: boolean;
+  nodeCount: number;
+  normalizedName: string;
 }
 
 export interface PageScreensState {
@@ -40,6 +45,8 @@ export function listPageScreens(): PageScreensState {
       name: node.name,
       type: node.type,
       empty: !hasVisibleContent(node),
+      nodeCount: countFigmaNodes(node),
+      normalizedName: normalizeScreenName(node.name),
     }))
     .sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }));
 
@@ -120,6 +127,20 @@ export function deriveDefaultProjectName(screenCount = 0): string {
   }
 
   return figma.currentPage.name || figma.root.name;
+}
+
+export function getDuplicateGroupsFromScreens(
+  screens: ScreenSummary[],
+): ReturnType<typeof findDuplicateScreenGroups> {
+  return findDuplicateScreenGroups(
+    screens
+      .filter((screen) => !screen.empty)
+      .map((screen) => ({
+        id: screen.id,
+        name: screen.name,
+        nodeCount: screen.nodeCount,
+      })),
+  );
 }
 
 export function getDefaultCheckedScreenIds(screens: ScreenSummary[]): string[] {

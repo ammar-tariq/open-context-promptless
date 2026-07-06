@@ -58,7 +58,19 @@ ${formatNavigationSection(navigationLinks, semantic.exportTarget)}
 
 ## Contents
 
-- \`data.json\` — Structured, semantic design data including layout hierarchy, components, typography, colors, spacing, assets, navigation links, and platform notes.
+- \`PROMPT.md\` — Copy-paste kickoff prompt for your AI agent (read after placing \`context/\` in your repo).
+- \`BUILD.md\` — Agent entry point: run all implementation phases autonomously.
+- \`AGENTS.md\` — Global rules for layout, typography, and QA.
+- \`phases/\` — Step-by-step implementation phases (design system → screens → navigation → QA).
+- \`catalog/screens.json\` — Canonical screen index with paths to per-screen files.
+- \`catalog/variants.json\` — Duplicate screen names and which variants were skipped (when applicable).
+- \`screens/{slug}/map.json\` — Screen-relative percentage layout map (tree structure).
+- \`screens/{slug}/reference.png\` — Full-frame reference image for visual QA.
+- \`screens/{slug}/meta.json\` — Screen metadata (frame size, content area, route).
+- \`shared/tokens.json\` — Colors, typography, spacing tokens.
+- \`shared/components.json\` — Component summaries.
+- \`navigation/flows.json\` — Prototype navigation links.
+- \`data.json\` — Full semantic design tree (debug / legacy compatibility).
 - \`assets/images/\` — Cropped raster exports for image layers and icon PNGs.
 - \`assets/icons/\` — Exported SVG vector icons from the design.
 ${semantic.exportTarget === 'react-native' ? '- `navigation-notes.md` — React Navigation setup guide with route names and navigate() mappings.' : ''}
@@ -67,11 +79,14 @@ ${formatPlatformSection(semantic)}
 
 ## Usage
 
-1. Place this \`context/\` folder in your project repository or share it with your AI coding agent.
-2. Reference the files when asking an AI assistant to implement, extend, or analyze the design.
-3. Use \`data.json\` as the canonical source of truth for design structure, tokens, and screen-to-screen links.
-4. Reference files in \`assets/\` when implementing images and icons in code.
-${semantic.exportTarget === 'react-native' ? '5. Use `navigation-notes.md` and `data.json` → `platform.linkMappings` when wiring React Navigation.' : ''}
+1. Create or open your application repository and scaffold the project if needed.
+2. Place this \`context/\` folder at \`./context\` in that repository.
+3. Open \`PROMPT.md\`, copy the kickoff prompt, and paste it into Cursor, Claude Code, or your AI agent.
+4. The agent should read \`BUILD.md\` and run all phases without per-screen prompts.
+5. Use \`screens/{slug}/map.json\` as the primary layout source for each screen.
+6. Compare implemented screens to \`screens/{slug}/reference.png\` during QA (phase 05).
+7. Reference files in \`assets/\` when implementing images and icons in code.
+${semantic.exportTarget === 'react-native' ? '8. Use `navigation/flows.json` and `navigation-notes.md` when wiring React Navigation.' : ''}
 
 ## Notes
 

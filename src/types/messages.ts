@@ -1,5 +1,6 @@
 import type { ExportTargetId } from '@/constants/export-targets';
 import type { ExportSummary } from './index';
+import type { VariantExportMode } from './map';
 
 export type PluginMessageType =
   | 'INIT'
@@ -16,6 +17,18 @@ export interface ScreenSummary {
   name: string;
   type: string;
   empty: boolean;
+  nodeCount: number;
+  normalizedName: string;
+}
+
+export interface DuplicateScreenGroup {
+  name: string;
+  normalizedName: string;
+  screens: Array<{
+    id: string;
+    name: string;
+    nodeCount: number;
+  }>;
 }
 
 export interface InitResponsePayload {
@@ -23,12 +36,15 @@ export interface InitResponsePayload {
   screens: ScreenSummary[];
   defaultProjectName: string;
   defaultCheckedScreenIds: string[];
+  duplicateGroups: DuplicateScreenGroup[];
 }
 
 export interface GenerateContextPayload {
   projectName: string;
   exportTarget: ExportTargetId;
   selectedScreenIds: string[];
+  variantMode: VariantExportMode;
+  canonicalOverrides?: Record<string, string>;
 }
 
 export interface GenerateProgressPayload {
@@ -48,6 +64,7 @@ export interface GenerateSuccessPayload {
   folderName: string;
   fileCount: number;
   exportDirectory: string;
+  starterPrompt: string;
 }
 
 export interface GenerateErrorPayload {

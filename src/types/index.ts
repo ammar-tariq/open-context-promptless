@@ -232,8 +232,12 @@ export interface ExportSummary {
   skippedAssetCount: number;
   navigationLinkCount: number;
   textElementCount: number;
+  mapFileCount: number;
+  referenceImageCount: number;
+  skippedVariantCount: number;
 }
 
 export * from './navigation';
 export * from './semantic';
 export * from './messages';
+export * from './map';

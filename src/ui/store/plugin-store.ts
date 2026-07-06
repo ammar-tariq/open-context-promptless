@@ -2,7 +2,8 @@ import { create } from 'zustand';
 import type { ExportTargetId } from '@/constants/export-targets';
 import { DEFAULT_EXPORT_TARGET } from '@/constants/export-targets';
 import type { ExportSummary } from '@/types';
-import type { GenerateErrorPayload, ScreenSummary } from '@/types/messages';
+import type { VariantExportMode } from '@/types/map';
+import type { DuplicateScreenGroup, GenerateErrorPayload, ScreenSummary } from '@/types/messages';
 
 export type UiStatus = 'idle' | 'loading' | 'success' | 'error';
 
@@ -12,10 +13,14 @@ interface PluginState {
   pageName: string;
   screens: ScreenSummary[];
   checkedScreenIds: string[];
+  duplicateGroups: DuplicateScreenGroup[];
+  variantMode: VariantExportMode;
+  canonicalOverrides: Record<string, string>;
   status: UiStatus;
   progress: number;
   progressStage: string;
   summary: ExportSummary | null;
+  starterPrompt: string | null;
   error: GenerateErrorPayload | null;
   setProjectName: (name: string) => void;
   setExportTarget: (exportTarget: ExportTargetId) => void;
@@ -24,13 +29,16 @@ interface PluginState {
     screens: ScreenSummary[];
     defaultProjectName: string;
     defaultCheckedScreenIds: string[];
+    duplicateGroups: DuplicateScreenGroup[];
   }) => void;
+  setVariantMode: (mode: VariantExportMode) => void;
+  setCanonicalOverride: (normalizedName: string, screenId: string) => void;
   toggleScreen: (screenId: string) => void;
   selectAllScreens: () => void;
   clearScreenSelection: () => void;
   setLoading: () => void;
   setProgress: (stage: string, progress: number) => void;
-  setSuccess: (summary: ExportSummary) => void;
+  setSuccess: (summary: ExportSummary, starterPrompt: string) => void;
   setError: (error: GenerateErrorPayload) => void;
   resetStatus: () => void;
 }
@@ -43,16 +51,33 @@ function countCheckedExportableScreens(
   return screens.filter((screen) => checked.has(screen.id) && !screen.empty).length;
 }
 
+function buildDefaultCanonicalOverrides(groups: DuplicateScreenGroup[]): Record<string, string> {
+  const overrides: Record<string, string> = {};
+
+  for (const group of groups) {
+    const canonical = [...group.screens].sort((a, b) => b.nodeCount - a.nodeCount)[0];
+    if (canonical) {
+      overrides[group.normalizedName] = canonical.id;
+    }
+  }
+
+  return overrides;
+}
+
 export const usePluginStore = create<PluginState>((set) => ({
   projectName: '',
   exportTarget: DEFAULT_EXPORT_TARGET,
   pageName: '',
   screens: [],
   checkedScreenIds: [],
+  duplicateGroups: [],
+  variantMode: 'canonical',
+  canonicalOverrides: {},
   status: 'idle',
   progress: 0,
   progressStage: '',
   summary: null,
+  starterPrompt: null,
   error: null,
   setProjectName: (projectName) => set({ projectName }),
   setExportTarget: (exportTarget) => set({ exportTarget }),
@@ -61,6 +86,7 @@ export const usePluginStore = create<PluginState>((set) => ({
     screens,
     defaultProjectName,
     defaultCheckedScreenIds,
+    duplicateGroups,
   }) =>
     set((state) => {
       const preservedChecked = state.checkedScreenIds.filter((id) =>
@@ -73,9 +99,19 @@ export const usePluginStore = create<PluginState>((set) => ({
         pageName,
         screens,
         checkedScreenIds,
+        duplicateGroups,
+        canonicalOverrides: buildDefaultCanonicalOverrides(duplicateGroups),
         projectName: state.projectName || defaultProjectName,
       };
     }),
+  setVariantMode: (variantMode) => set({ variantMode }),
+  setCanonicalOverride: (normalizedName, screenId) =>
+    set((state) => ({
+      canonicalOverrides: {
+        ...state.canonicalOverrides,
+        [normalizedName]: screenId,
+      },
+    })),
   toggleScreen: (screenId) =>
     set((state) => {
       const screen = state.screens.find((entry) => entry.id === screenId);
@@ -104,14 +140,16 @@ export const usePluginStore = create<PluginState>((set) => ({
       progressStage: 'Starting export…',
       error: null,
       summary: null,
+      starterPrompt: null,
     }),
   setProgress: (progressStage, progress) => set({ progressStage, progress }),
-  setSuccess: (summary) =>
+  setSuccess: (summary, starterPrompt) =>
     set({
       status: 'success',
       progress: 1,
       progressStage: 'Complete',
       summary,
+      starterPrompt,
       error: null,
     }),
   setError: (error) =>
@@ -125,6 +163,7 @@ export const usePluginStore = create<PluginState>((set) => ({
       progress: 0,
       progressStage: '',
       summary: null,
+      starterPrompt: null,
       error: null,
     }),
 }));

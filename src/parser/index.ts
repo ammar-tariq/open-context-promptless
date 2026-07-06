@@ -119,7 +119,6 @@ async function parseNodeTree(node: SceneNode, context: ParseContext): Promise<Pa
 
   if ('children' in node) {
     for (const child of node.children) {
-      if (!child.visible) continue;
       children.push(await parseNodeTree(child, { ...context, isRoot: false }));
     }
   }

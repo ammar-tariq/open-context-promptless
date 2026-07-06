@@ -6,6 +6,7 @@ import {
   deriveDefaultProjectName,
   generateContextPackage,
   getDefaultCheckedScreenIds,
+  getDuplicateGroupsFromScreens,
   listPageScreens,
   SelectionError,
   ExportError,
@@ -54,6 +55,7 @@ function toGenerateErrorPayload(error: unknown): GenerateErrorPayload {
 function sendInitState(): void {
   const { pageName, screens } = listPageScreens();
   const defaultCheckedScreenIds = getDefaultCheckedScreenIds(screens);
+  const duplicateGroups = getDuplicateGroupsFromScreens(screens);
 
   postToUi(
     createMessage('INIT_RESPONSE', {
@@ -61,6 +63,7 @@ function sendInitState(): void {
       screens,
       defaultProjectName: deriveDefaultProjectName(defaultCheckedScreenIds.length),
       defaultCheckedScreenIds,
+      duplicateGroups,
     }),
   );
 }
@@ -82,6 +85,8 @@ figma.ui.onmessage = async (message: PluginMessage) => {
             projectName?: string;
             exportTarget?: string;
             selectedScreenIds?: string[];
+            variantMode?: string;
+            canonicalOverrides?: Record<string, string>;
           }
         | undefined;
       const projectName = payload?.projectName;
@@ -110,6 +115,15 @@ figma.ui.onmessage = async (message: PluginMessage) => {
           (stage, progress) => {
             postToUi(createMessage('GENERATE_PROGRESS', { stage, progress }));
           },
+          {
+            exportOptions: {
+              variantMode:
+                payload?.variantMode === 'all' || payload?.variantMode === 'custom'
+                  ? payload.variantMode
+                  : 'canonical',
+              canonicalOverrides: payload?.canonicalOverrides,
+            },
+          },
         );
 
         for (const file of result.files) {
@@ -129,6 +143,7 @@ figma.ui.onmessage = async (message: PluginMessage) => {
             folderName: result.folderName,
             fileCount: result.files.length,
             exportDirectory: result.folderName,
+            starterPrompt: result.starterPrompt,
           }),
         );
       } catch (error) {

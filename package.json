@@ -1,6 +1,6 @@
 {
   "name": "opencontext-promptless",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Extract Figma designs into AI-ready context packages so your AI can understand your designs better",
   "private": true,
   "type": "module",

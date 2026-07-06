@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { PLUGIN_NAME, PLUGIN_VERSION, SELECTABLE_EXPORT_TARGETS } from '@/constants';
 import { usePluginStore, useSelectedScreenCount } from '@/ui/store/plugin-store';
 import {
@@ -117,6 +118,84 @@ function ScreenPicker() {
   );
 }
 
+function VariantPicker() {
+  const duplicateGroups = usePluginStore((state) => state.duplicateGroups);
+  const variantMode = usePluginStore((state) => state.variantMode);
+  const canonicalOverrides = usePluginStore((state) => state.canonicalOverrides);
+  const status = usePluginStore((state) => state.status);
+  const setVariantMode = usePluginStore((state) => state.setVariantMode);
+  const setCanonicalOverride = usePluginStore((state) => state.setCanonicalOverride);
+
+  const isGenerating = status === 'loading';
+
+  if (duplicateGroups.length === 0) {
+    return null;
+  }
+
+  const totalDuplicates = duplicateGroups.reduce((sum, group) => sum + group.screens.length, 0);
+  const uniqueNames = duplicateGroups.length;
+
+  return (
+    <section className="variant-picker" aria-labelledby="variant-picker-title">
+      <div className="variant-picker__header">
+        <h2 id="variant-picker-title" className="variant-picker__title">
+          Duplicate screen names
+        </h2>
+        <p className="variant-picker__subtitle">
+          {totalDuplicates} frames share {uniqueNames} name{uniqueNames === 1 ? '' : 's'}
+        </p>
+      </div>
+
+      <label className="field">
+        <span className="field__label">Variant handling</span>
+        <select
+          className="field__input field__select"
+          value={variantMode}
+          disabled={isGenerating}
+          onChange={(event) => setVariantMode(event.target.value as typeof variantMode)}
+        >
+          <option value="canonical">One per name (recommended)</option>
+          <option value="all">Export all variants</option>
+          <option value="custom">Choose per group</option>
+        </select>
+        <span className="field__hint">
+          {variantMode === 'canonical'
+            ? 'Exports the largest variant per name; others listed in catalog/variants.json.'
+            : variantMode === 'all'
+              ? 'Exports every selected frame, including duplicates.'
+              : 'Pick which variant to export for each duplicate name.'}
+        </span>
+      </label>
+
+      {variantMode === 'custom' ? (
+        <ul className="variant-picker__groups">
+          {duplicateGroups.map((group) => (
+            <li key={group.normalizedName} className="variant-picker__group">
+              <span className="variant-picker__group-name">
+                {group.name} ({group.screens.length})
+              </span>
+              <select
+                className="field__input field__select"
+                disabled={isGenerating}
+                value={canonicalOverrides[group.normalizedName] ?? group.screens[0]?.id ?? ''}
+                onChange={(event) =>
+                  setCanonicalOverride(group.normalizedName, event.target.value)
+                }
+              >
+                {group.screens.map((screen) => (
+                  <option key={screen.id} value={screen.id}>
+                    {screen.name} · {screen.nodeCount} nodes
+                  </option>
+                ))}
+              </select>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+    </section>
+  );
+}
+
 function ProgressIndicator() {
   const status = usePluginStore((state) => state.status);
   const progress = usePluginStore((state) => state.progress);
@@ -134,9 +213,55 @@ function ProgressIndicator() {
   );
 }
 
+function StarterPromptCard({ prompt }: { prompt: string }) {
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(prompt);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 2000);
+    } catch {
+      const textarea = document.createElement('textarea');
+      textarea.value = prompt;
+      textarea.style.position = 'fixed';
+      textarea.style.opacity = '0';
+      document.body.appendChild(textarea);
+      textarea.select();
+      document.execCommand('copy');
+      document.body.removeChild(textarea);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 2000);
+    }
+  };
+
+  return (
+    <div className="starter-prompt">
+      <div className="starter-prompt__header">
+        <p className="starter-prompt__title">Next steps</p>
+        <ol className="starter-prompt__steps">
+          <li>Create or open your app repo and scaffold the project if needed.</li>
+          <li>
+            Place the exported <code>context/</code> folder at <code>./context</code> in that repo.
+          </li>
+          <li>Copy the prompt below into Cursor, Claude Code, or your AI agent.</li>
+        </ol>
+      </div>
+      <pre className="starter-prompt__text">{prompt}</pre>
+      <button type="button" className="button button--primary button--compact" onClick={handleCopy}>
+        {copied ? 'Copied!' : 'Copy agent prompt'}
+      </button>
+      <p className="starter-prompt__hint">
+        The same prompt is saved in <code>context/PROMPT.md</code>.
+      </p>
+    </div>
+  );
+}
+
 function StatusMessage() {
   const status = usePluginStore((state) => state.status);
   const summary = usePluginStore((state) => state.summary);
+  const starterPrompt = usePluginStore((state) => state.starterPrompt);
   const error = usePluginStore((state) => state.error);
   const resetStatus = usePluginStore((state) => state.resetStatus);
 
@@ -144,21 +269,30 @@ function StatusMessage() {
     return (
       <div className="status status--success" role="status">
         <p className="status__title">Context package exported</p>
-        <ul className="status__list">
-          <li>{summary.screenCount} screens</li>
-          <li>{summary.componentCount} components</li>
-          <li>{summary.imageCount} images</li>
-          <li>{summary.iconCount} icons</li>
-          <li>{summary.exportedAssetCount} exported asset files</li>
-          {summary.deduplicatedAssetCount > 0 ? (
-            <li>{summary.deduplicatedAssetCount} duplicate assets reused</li>
-          ) : null}
-          <li>{summary.navigationLinkCount} prototype links</li>
-          {summary.skippedAssetCount > 0 ? (
-            <li>{summary.skippedAssetCount} assets skipped (see plugin console)</li>
-          ) : null}
-          <li>{summary.textElementCount} text elements</li>
-        </ul>
+        {starterPrompt ? <StarterPromptCard prompt={starterPrompt} /> : null}
+        <details className="status__details-wrap">
+          <summary>Export summary</summary>
+          <ul className="status__list">
+            <li>{summary.screenCount} screens exported</li>
+            {summary.skippedVariantCount > 0 ? (
+              <li>{summary.skippedVariantCount} duplicate variants skipped</li>
+            ) : null}
+            <li>{summary.mapFileCount} layout maps</li>
+            <li>{summary.referenceImageCount} reference images</li>
+            <li>{summary.componentCount} components</li>
+            <li>{summary.imageCount} images</li>
+            <li>{summary.iconCount} icons</li>
+            <li>{summary.exportedAssetCount} exported asset files</li>
+            {summary.deduplicatedAssetCount > 0 ? (
+              <li>{summary.deduplicatedAssetCount} duplicate assets reused</li>
+            ) : null}
+            <li>{summary.navigationLinkCount} prototype links</li>
+            {summary.skippedAssetCount > 0 ? (
+              <li>{summary.skippedAssetCount} assets skipped (see plugin console)</li>
+            ) : null}
+            <li>{summary.textElementCount} text elements</li>
+          </ul>
+        </details>
         <button type="button" className="button button--ghost" onClick={resetStatus}>
           Export again
         </button>
@@ -192,6 +326,8 @@ export function App() {
   const projectName = usePluginStore((state) => state.projectName);
   const exportTarget = usePluginStore((state) => state.exportTarget);
   const checkedScreenIds = usePluginStore((state) => state.checkedScreenIds);
+  const variantMode = usePluginStore((state) => state.variantMode);
+  const canonicalOverrides = usePluginStore((state) => state.canonicalOverrides);
   const status = usePluginStore((state) => state.status);
   const setProjectName = usePluginStore((state) => state.setProjectName);
   const setExportTarget = usePluginStore((state) => state.setExportTarget);
@@ -214,6 +350,8 @@ export function App() {
           projectName: projectName.trim(),
           exportTarget,
           selectedScreenIds: checkedScreenIds,
+          variantMode,
+          canonicalOverrides: variantMode === 'custom' ? canonicalOverrides : undefined,
         }),
       );
     } catch (error) {
@@ -241,6 +379,8 @@ export function App() {
 
       <main className="main">
         <ScreenPicker />
+
+        <VariantPicker />
 
         <button
           type="button"
@@ -291,13 +431,24 @@ export function App() {
           {isGenerating ? 'Generating…' : 'Generate Context'}
         </button>
 
+        {status === 'idle' ? (
+          <div className="info-banner info-banner--neutral">
+            <p className="info-banner__title">After export</p>
+            <p className="info-banner__text">
+              Put the <code>context/</code> folder at <code>./context</code> in your app repo, then
+              copy the agent prompt into your AI coding tool. You will get scaffold + full-app
+              instructions when export completes.
+            </p>
+          </div>
+        ) : null}
+
         <ProgressIndicator />
         <StatusMessage />
       </main>
 
       <footer className="footer">
-        Exports a <code>context/</code> folder when your browser allows it, otherwise downloads{' '}
-        <code>context.zip</code>.
+        Exports a <code>context/</code> package with per-screen maps and reference images. Saves to a
+        folder when your browser allows it, otherwise downloads <code>context.zip</code>.
       </footer>
     </div>
   );

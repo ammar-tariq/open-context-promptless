@@ -1,12 +1,17 @@
 import type { ExportTargetId } from '@/constants/export-targets';
-import type { ContextPackage, ExportSummary, ParsedDesign } from '@/types';
+import type { ContextPackage, ExportSummary, ExportOptions, ParsedDesign } from '@/types';
+import { defaultVariantMode } from '@/services/variant-resolution-service';
 import { validateProjectName } from '@/shared/schemas';
 import { exportContextPackage } from '@/exporters';
 import { parseDesign } from '@/parser';
-import { validateExportTargetId } from '@/platforms';
+import { validateExportTargetId, applyPlatformEnhancements } from '@/platforms';
+import { translateDesign } from '@/translator';
 import { ExportLikeError, extractErrorDetails } from '@/utils/error-details';
+import { generateStarterPrompt } from '@/utils/starter-prompt';
 import { exportDesignAssets, enrichDesignWithAssetPaths } from './asset-export-service';
 import { getExportNodesByIds, SelectionError } from './selection-service';
+import { buildScreenPackage } from './screen-package-service';
+import { resolveScreenVariants } from './variant-resolution-service';
 
 export class ExportError extends ExportLikeError {
   constructor(message: string, code: string, details?: string) {
@@ -20,10 +25,27 @@ export interface ExportResult {
   files: ContextPackage['files'];
   design: ParsedDesign;
   summary: ExportSummary;
+  starterPrompt: string;
 }
 
 export interface ExportProgressHandler {
   (stage: string, progress: number): void;
+}
+
+export interface GenerateContextOptions {
+  exportOptions?: ExportOptions;
+}
+
+function filterDesignScreens(design: ParsedDesign, screenIds: Set<string>): ParsedDesign {
+  const screens = design.screens.filter((screen) => screenIds.has(screen.id));
+  return {
+    ...design,
+    screens,
+    metadata: {
+      ...design.metadata,
+      screenCount: screens.length,
+    },
+  };
 }
 
 /**
@@ -34,10 +56,13 @@ export async function generateContextPackage(
   exportTargetId: ExportTargetId,
   selectedScreenIds: string[],
   onProgress?: ExportProgressHandler,
+  options?: GenerateContextOptions,
 ): Promise<ExportResult> {
   try {
     const normalizedName = validateProjectName(projectName);
     const normalizedTarget = validateExportTargetId(exportTargetId);
+    const exportOptions = options?.exportOptions ?? { variantMode: defaultVariantMode() };
+
     onProgress?.('Reading screens', 0.05);
 
     const nodes = await getExportNodesByIds(selectedScreenIds);
@@ -51,18 +76,36 @@ export async function generateContextPackage(
       onProgress,
     );
 
+    const resolution = resolveScreenVariants(design.screens, exportOptions);
+    const selectedIds = new Set(resolution.selectedScreens.map((screen) => screen.id));
+    const exportDesign = filterDesignScreens(design, selectedIds);
+
     onProgress?.('Exporting assets', 0.85);
-    const assetResult = await exportDesignAssets(design, onProgress);
+    const assetResult = await exportDesignAssets(exportDesign, onProgress);
 
     const enrichedDesign = enrichDesignWithAssetPaths(
-      design,
+      exportDesign,
       assetResult.nodeExportPaths,
       assetResult.nodeRasterExportPaths,
     );
 
-    onProgress?.('Building context package', 0.96);
+    let semantic = translateDesign(enrichedDesign, normalizedTarget);
+    semantic = applyPlatformEnhancements(semantic, enrichedDesign, normalizedTarget);
+
+    onProgress?.('Building context package', 0.9);
     const contextPackage = exportContextPackage(enrichedDesign, normalizedTarget);
     contextPackage.files.push(...assetResult.files);
+
+    const selectedNodes = nodes.filter((node) => selectedIds.has(node.id));
+    const screenPackageResult = await buildScreenPackage({
+      design: enrichedDesign,
+      semantic,
+      nodes: selectedNodes,
+      options: exportOptions,
+      onProgress,
+    });
+
+    contextPackage.files.push(...screenPackageResult.files);
 
     if (contextPackage.files.length === 0) {
       throw new ExportError('Export produced no files.', 'EXPORT_EMPTY');
@@ -70,12 +113,24 @@ export async function generateContextPackage(
 
     onProgress?.('Preparing files for export', 0.99);
 
+    const mapFileCount = screenPackageResult.files.filter((file) => file.path.endsWith('/map.json')).length;
+    const referenceImageCount = screenPackageResult.files.filter((file) =>
+      file.path.endsWith('/reference.png'),
+    ).length;
+
+    const starterPrompt = generateStarterPrompt({
+      projectName: normalizedName,
+      exportTarget: normalizedTarget,
+      screenCount: screenPackageResult.exportedScreenCount,
+    });
+
     return {
       folderName: contextPackage.folderName,
       files: contextPackage.files,
       design: enrichedDesign,
+      starterPrompt,
       summary: {
-        screenCount: enrichedDesign.metadata.screenCount,
+        screenCount: screenPackageResult.exportedScreenCount,
         componentCount: enrichedDesign.metadata.componentCount,
         imageCount: enrichedDesign.metadata.imageCount,
         iconCount: enrichedDesign.icons.length,
@@ -84,6 +139,9 @@ export async function generateContextPackage(
         skippedAssetCount: assetResult.skippedAssets.length,
         navigationLinkCount: enrichedDesign.navigation.linkCount,
         textElementCount: enrichedDesign.metadata.textElementCount,
+        mapFileCount,
+        referenceImageCount,
+        skippedVariantCount: screenPackageResult.skippedVariantCount,
       },
     };
   } catch (error) {

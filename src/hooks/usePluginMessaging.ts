@@ -22,7 +22,8 @@ function isInitResponsePayload(payload: unknown): payload is InitResponsePayload
     'pageName' in payload &&
     'screens' in payload &&
     'defaultProjectName' in payload &&
-    'defaultCheckedScreenIds' in payload
+    'defaultCheckedScreenIds' in payload &&
+    'duplicateGroups' in payload
   );
 }
 
@@ -93,7 +94,11 @@ export function usePluginMessaging(): void {
             try {
               setProgress('Preparing download…', 0.995);
               await finalizeExportDelivery(message.payload.folderName);
-              setSuccess(message.payload.summary);
+              const starterPrompt =
+                'starterPrompt' in message.payload && typeof message.payload.starterPrompt === 'string'
+                  ? message.payload.starterPrompt
+                  : '';
+              setSuccess(message.payload.summary, starterPrompt);
             } catch (error) {
               cancelExportDelivery();
               setError({
