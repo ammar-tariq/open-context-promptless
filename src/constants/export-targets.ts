@@ -18,13 +18,15 @@ export const EXPORT_TARGETS: ExportTargetDefinition[] = [
   {
     id: 'generic',
     label: 'General',
-    description: 'Framework-agnostic design context for any stack or AI workflow.',
+    description:
+      'Stack-agnostic context. PROMPT asks you to confirm tech stack; no RN-specific structure.',
     status: 'supported',
   },
   {
     id: 'react-native',
     label: 'React Native (unstable)',
-    description: 'Screen routes and React Navigation implementation notes.',
+    description:
+      'Expo/RN AGENTS.md, screen folders (index.tsx + styles.ts), anti-renderer rules, navigation notes.',
     status: 'supported',
   },
   {

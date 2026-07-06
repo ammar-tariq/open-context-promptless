@@ -97,10 +97,14 @@ function buildReactNativeNotes(
   mappedLinkCount: number,
 ): string[] {
   const notes = [
+    'Use Expo + TypeScript + Expo Router unless the repo already uses React Native CLI.',
+    'Implement typed screen modules per AGENTS.md — do NOT build a generic map.json renderer.',
+    'Each screen: src/screens/{slug}/index.tsx + styles.ts; thin re-export in src/app/{slug}.tsx.',
     'Use @react-navigation/native with a native stack navigator for screen-to-screen flows.',
     `Register ${routes.length} screen route(s): ${routes.map((route) => route.routeName).join(', ') || 'none'}.`,
     `Suggested initial route: ${routes[0]?.routeName ?? 'Screen'}.`,
     'Wire prototype links using navigation.navigate(...) on the exported source element.',
+    'Load all fonts from shared/tokens.json — do not substitute system fonts.',
     'See navigation-notes.md for a starter NavigationContainer setup.',
   ];
 

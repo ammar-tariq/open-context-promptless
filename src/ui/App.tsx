@@ -435,9 +435,10 @@ export function App() {
           <div className="info-banner info-banner--neutral">
             <p className="info-banner__title">After export</p>
             <p className="info-banner__text">
-              Put the <code>context/</code> folder at <code>./context</code> in your app repo, then
-              copy the agent prompt into your AI coding tool. You will get scaffold + full-app
-              instructions when export completes.
+              Put <code>context/</code> at <code>./context</code> in your app repo. Use{' '}
+              <strong>React Native</strong> target when building Expo/RN — it exports typed screen
+              structure rules and forbids generic map renderers. <strong>General</strong> asks the
+              agent to confirm your stack first.
             </p>
           </div>
         ) : null}
