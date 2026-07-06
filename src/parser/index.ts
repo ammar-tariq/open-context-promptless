@@ -108,7 +108,7 @@ interface ParseContext {
 }
 
 async function parseNodeTree(node: SceneNode, context: ParseContext): Promise<ParsedNode> {
-  collectTokensFromNode(node, context);
+  await collectTokensFromNode(node, context);
 
   const typography = node.type === 'TEXT' ? await extractTypography(node) : undefined;
   if (typography) {
@@ -124,6 +124,8 @@ async function parseNodeTree(node: SceneNode, context: ParseContext): Promise<Pa
     }
   }
 
+  const componentRef = await resolveComponentRef(node);
+
   return {
     metadata: buildMetadataForNode(node),
     semanticType: inferSemanticType(node, context.isRoot ?? false),
@@ -137,8 +139,8 @@ async function parseNodeTree(node: SceneNode, context: ParseContext): Promise<Pa
     cornerRadius: extractCornerRadius(node),
     spacing: extractPadding(node),
     textContent: node.type === 'TEXT' ? node.characters : undefined,
-    componentId: getComponentId(node),
-    componentName: getComponentName(node),
+    componentId: componentRef.id,
+    componentName: componentRef.name,
     isInstance: node.type === 'INSTANCE',
     variantProperties: extractVariantProperties(node),
     variables: await extractVariables(node),
@@ -504,24 +506,29 @@ function extractPadding(node: SceneNode): SpacingValue | undefined {
   return spacing;
 }
 
-function getComponentId(node: SceneNode): string | undefined {
-  if (node.type === 'INSTANCE') {
-    return node.mainComponent?.id ?? undefined;
-  }
-  if (node.type === 'COMPONENT') {
-    return node.id;
-  }
-  return undefined;
+interface ComponentRef {
+  id?: string;
+  name?: string;
 }
 
-function getComponentName(node: SceneNode): string | undefined {
-  if (node.type === 'INSTANCE') {
-    return node.mainComponent?.name ?? node.name;
-  }
+async function resolveComponentRef(node: SceneNode): Promise<ComponentRef> {
   if (node.type === 'COMPONENT') {
-    return node.name;
+    return { id: node.id, name: node.name };
   }
-  return undefined;
+
+  if (node.type === 'INSTANCE') {
+    try {
+      const mainComponent = await node.getMainComponentAsync();
+      return {
+        id: mainComponent?.id,
+        name: mainComponent?.name ?? node.name,
+      };
+    } catch {
+      return { name: node.name };
+    }
+  }
+
+  return {};
 }
 
 function extractVariantProperties(node: SceneNode): ComponentVariantProperty[] | undefined {
@@ -630,7 +637,7 @@ function serializeTransform(transform: Transform): number[][] {
   return transform.map((row) => [...row]);
 }
 
-function collectTokensFromNode(node: SceneNode, context: ParseContext): void {
+async function collectTokensFromNode(node: SceneNode, context: ParseContext): Promise<void> {
   const fills = extractFills(node);
   if (fills) {
     for (const fill of fills) {
@@ -646,13 +653,14 @@ function collectTokensFromNode(node: SceneNode, context: ParseContext): void {
   }
 
   if (node.type === 'COMPONENT' || node.type === 'INSTANCE') {
-    const componentId = getComponentId(node) ?? node.id;
+    const componentRef = await resolveComponentRef(node);
+    const componentId = componentRef.id ?? node.id;
     const existing = context.componentMap.get(componentId);
     const variantProperties = extractVariantProperties(node) ?? [];
 
     context.componentMap.set(componentId, {
       id: componentId,
-      name: getComponentName(node) ?? node.name,
+      name: componentRef.name ?? node.name,
       description: node.type === 'COMPONENT' ? node.description : existing?.description,
       variantCount: (existing?.variantCount ?? 0) + (variantProperties.length > 0 ? 1 : 0),
       propertyNames: mergeUnique(existing?.propertyNames ?? [], variantProperties.map((p) => p.name)),
