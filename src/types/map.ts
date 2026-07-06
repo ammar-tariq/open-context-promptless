@@ -141,7 +141,10 @@ export interface ScreenSpec {
     hasFileUpload: boolean;
     hasBottomTabBar: boolean;
     hasWhiteCard: boolean;
+    hasImageAssets: boolean;
   };
+  /** Major section headings in top-to-bottom order (from map topPercent). */
+  sectionOrder?: string[];
   copy: ScreenCopyFields;
   implementationChecklist: string[];
   forbiddenShortcuts: string[];

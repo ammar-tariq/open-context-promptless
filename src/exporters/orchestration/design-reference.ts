@@ -41,6 +41,46 @@ Read \`screens/{slug}/spec.json\` for \`screenKind\` — suffixes like \`-2\` ar
 Use \`screens/{slug}/copy.json\` for **verbatim** labels, placeholders, and button text.
 `.trim();
 
+export const FORBIDDEN_VISUAL_SHORTCUTS = `
+## Forbidden visual shortcuts (all targets)
+
+These patterns produce screens that **look wrong** even when copy strings match. Do **not** use them.
+
+### Placeholders instead of design assets
+- **Do NOT** use solid \`backgroundColor\` blocks when \`map.json\` lists an \`asset\` path for that node.
+- **Do NOT** skip \`assets/images/\` and \`assets/icons/\` referenced in the map.
+- **Do NOT** substitute generic icon libraries (e.g. Ionicons) when the design exports specific icons in \`assets/\`.
+
+### Generic layout shells
+- **Do NOT** apply a reusable "auth template" (purple gradient header + white card overlay) unless \`reference.png\` clearly shows that layout for **this slug**.
+- **Do NOT** reuse one \`EventCard\`, \`AuthTextField\`, or \`BottomTabBar\` shape across screens if it does not match each slug's \`reference.png\`.
+- **Do NOT** reorder major sections (headings, lists, banners) differently from \`map.json\` \`topPercent\` order — check \`spec.json\` → \`sectionOrder\` when present.
+
+### Shared components vs per-screen fidelity
+- Shared components in \`src/components/\` are for **repeated patterns that match the design** — not to stub every screen with the same layout.
+- If a shared component does not match \`reference.png\` for a slug, **fix the component or write screen-local UI** — do not ship the shortcut.
+
+### Completion gates
+- **Do NOT** mark a screen done without opening \`screens/{slug}/reference.png\` side-by-side with the running UI.
+- **Do NOT** mark phase 03 complete until phase 05 visual checks pass for every slug.
+`.trim();
+
+export const MANDATORY_SCREEN_WORKFLOW = `
+## Mandatory per-screen workflow
+
+For **every** slug in \`catalog/screens.json\`, follow this sequence — no skipping steps:
+
+1. **Open** \`screens/{slug}/reference.png\` — study layout, colors, section order, icons, and images.
+2. **Read** \`screens/{slug}/spec.json\` → \`implementationChecklist\` and \`forbiddenShortcuts\`.
+3. **Read** \`screens/{slug}/copy.json\` — all user-visible strings must appear verbatim.
+4. **Read** \`screens/{slug}/map.json\` — note \`asset\` paths, \`topPercent\` section order, field icons, and layout pattern.
+5. **Implement** \`src/screens/{slug}/index.tsx\` + \`styles.ts\` unique to this slug.
+6. **Wire assets** from \`assets/\` for every \`asset\` reference in the map (no color placeholders).
+7. **Compare** running UI to \`reference.png\` — fix mismatches before moving to the next slug.
+
+If \`spec.json\` lists \`sectionOrder\`, render sections in that exact top-to-bottom order.
+`.trim();
+
 export const ASSETS_AND_QA = `
 ## Assets
 

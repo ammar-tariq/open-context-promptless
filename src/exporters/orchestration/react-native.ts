@@ -6,6 +6,8 @@ import {
   DESIGN_REFERENCE_LAYOUT,
   FORBIDDEN_GENERIC_RENDERER,
   FORBIDDEN_TEMPLATE_BATCHING,
+  FORBIDDEN_VISUAL_SHORTCUTS,
+  MANDATORY_SCREEN_WORKFLOW,
 } from './design-reference';
 import {
   buildScreenSpecDetailSection,
@@ -66,6 +68,10 @@ Export target: **React Native** (Expo + TypeScript)
 ${FORBIDDEN_GENERIC_RENDERER}
 
 ${FORBIDDEN_TEMPLATE_BATCHING}
+
+${FORBIDDEN_VISUAL_SHORTCUTS}
+
+${MANDATORY_SCREEN_WORKFLOW}
 
 ## Copy fidelity
 
@@ -149,6 +155,8 @@ Before phase 03, extract repeated patterns from multiple screens into \`src/comp
 - Cards and list rows used on 2+ screens
 
 **Never** duplicate the same tab bar implementation in all 27 screen files.
+
+**But:** if a shared component does not match a slug's \`reference.png\`, fix it or write screen-local UI — do not ship a generic shortcut that diverges from the design.
 
 ## Process
 
@@ -236,6 +244,8 @@ Shared components are **required** — phase 03 depends on them.
 
 Implement **all** screens as typed React Native modules — one unique folder per slug.
 
+**You may not skip to the next slug until the current one matches \`reference.png\`.**
+
 ## Summary checklist
 
 ${screenBullets || '_No screens._'}
@@ -246,18 +256,24 @@ ${detailSections}
 
 ## Per screen (\`src/screens/{slug}/\`)
 
-1. Read \`context/screens/{slug}/spec.json\` and \`copy.json\` first
-2. Open \`context/screens/{slug}/reference.png\` before writing layout code
-3. Create \`index.tsx\` + \`styles.ts\` — **unique to this slug**
-4. Use \`copy.json\` labels and button text verbatim
-5. Create thin route \`src/app/{slug}.tsx\` re-exporting the screen
-6. Compare result to \`reference.png\` before marking done
+Follow \`AGENTS.md\` → **Mandatory per-screen workflow** for every slug:
+
+1. Open \`reference.png\` first — keep it visible while coding
+2. Read \`spec.json\` → \`forbiddenShortcuts\` and \`implementationChecklist\`
+3. Read \`copy.json\` and \`map.json\` (assets + section order)
+4. Implement \`index.tsx\` + \`styles.ts\` — unique to this slug
+5. Wire \`assets/\` paths from map — no color placeholders
+6. Compare to \`reference.png\` before marking done
 
 ## Forbidden
 
 - \`src/screens/_templates/\` shared across slugs
 - \`screenDefinitions.json\` + \`generate-screens.mjs\` batch stubs
 - One-line \`<MapScreen map={...} />\` or \`<FormScreenView step={n} />\` wrappers
+- Solid-color blocks where map.json lists \`asset\` paths
+- Generic auth gradient+card shell when \`reference.png\` shows a different layout
+- Reordering sections differently from \`spec.json\` → \`sectionOrder\`
+- Marking a screen done without side-by-side \`reference.png\` comparison
 - Treating \`create-league-2\` as "step 2" of \`create-league\` (check \`screenKind\` in spec.json)
 `,
     'phases/04-navigation.md': `# Phase 04 — Navigation (React Native)
@@ -277,13 +293,26 @@ ${detailSections}
 `,
     'phases/05-qa.md': `# Phase 05 — QA (React Native)
 
-Visual verification against design references.
+Visual verification against design references. **Phase 03 is not complete until this passes for every slug.**
 
 ## Per screen
 
 1. Render on ${catalog[0]?.frame.width ?? 390}×${catalog[0]?.frame.height ?? 844} (or full device width with proportional scaling)
-2. Compare to \`context/screens/{slug}/reference.png\`
-3. Verify fonts, colors, and shared components match — not just bounding boxes
+2. Open \`context/screens/{slug}/reference.png\` side-by-side with the running UI
+3. Verify:
+   - Section order matches \`spec.json\` → \`sectionOrder\` (when present)
+   - Images/icons use \`assets/\` paths from map — not color placeholders
+   - Copy matches \`copy.json\` verbatim
+   - Layout pattern matches reference (no wrong auth shell, no missing tab bar/FAB)
+4. Fix mismatches — do not defer to a later pass
+
+## Rejection criteria (must fix)
+
+- Solid-color blocks where design shows images
+- Wrong section order vs \`reference.png\`
+- Generic auth gradient+card when design shows light background + logo
+- Tab bar labels/order/active state wrong vs reference
+- Shared component used but visually diverges from reference for that slug
 
 ## Checklist
 

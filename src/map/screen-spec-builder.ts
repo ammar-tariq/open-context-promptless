@@ -24,6 +24,7 @@ interface CollectedText {
   content: string;
   fontSize: number;
   name: string;
+  topPercent: number | null;
 }
 
 /** Groups exported screens by normalized Figma name for variant metadata. */
@@ -79,6 +80,7 @@ function collectVisibleTexts(map: ScreenMap): CollectedText[] {
       content,
       fontSize: node.text.fontSize,
       name: node.name,
+      topPercent: node.placement.absolute.topPercent ?? null,
     });
   });
 
@@ -106,6 +108,19 @@ function categorizeCopy(texts: CollectedText[]): ScreenCopyManifest['copy'] {
 
     if (/^Enter /i.test(content) || content === 'Upload Image') {
       placeholders.push(content);
+      continue;
+    }
+
+    if (
+      /@email|@gmail|password|confirm password|full name|search\.\.\./i.test(content) &&
+      content.length < 40
+    ) {
+      placeholders.push(content);
+      continue;
+    }
+
+    if (/^(Sign in|Sign up)$/i.test(content)) {
+      headings.push(content);
       continue;
     }
 
@@ -173,12 +188,80 @@ function detectWhiteCard(map: ScreenMap): boolean {
 }
 
 function detectBottomTabBar(texts: CollectedText[]): boolean {
-  const joined = texts.map((t) => t.content.toLowerCase()).join(' ');
-  return (
+  const lowered = texts.map((t) => t.content.toLowerCase());
+  const joined = lowered.join(' ');
+
+  if (
     joined.includes('home') &&
     joined.includes('discover') &&
     (joined.includes('community') || joined.includes('leagues'))
+  ) {
+    return true;
+  }
+
+  const navSets = [
+    ['explore', 'events', 'map'],
+    ['home', 'search', 'profile'],
+    ['feed', 'discover', 'profile'],
+  ];
+
+  for (const set of navSets) {
+    if (set.every((label) => joined.includes(label))) {
+      return true;
+    }
+  }
+
+  const bottomNavLabels = texts.filter(
+    (t) =>
+      t.topPercent !== null &&
+      t.topPercent >= 88 &&
+      t.content.length <= 20 &&
+      /^[a-z\s]+$/i.test(t.content),
   );
+
+  return bottomNavLabels.length >= 3;
+}
+
+function countImageAssets(map: ScreenMap): number {
+  let count = 0;
+
+  walkViews(map.views, (node) => {
+    if (node.visible && node.asset?.includes('/images/')) {
+      count += 1;
+    }
+  });
+
+  return count;
+}
+
+const SECTION_HEADING_PATTERN =
+  /^(nearby you|upcoming events|see all|popular|featured|invite your friends|sign in|sign up|verification|reset password|resset password)/i;
+
+function buildSectionOrder(texts: CollectedText[]): string[] {
+  const sections = texts
+    .filter(
+      (t) =>
+        t.topPercent !== null &&
+        t.topPercent < 90 &&
+        (SECTION_HEADING_PATTERN.test(t.content) ||
+          (t.fontSize >= 16 && t.content.length <= 40 && !t.content.includes('•'))),
+    )
+    .sort((a, b) => (a.topPercent ?? 0) - (b.topPercent ?? 0));
+
+  const seen = new Set<string>();
+  const ordered: string[] = [];
+
+  for (const entry of sections) {
+    const key = entry.content.toLowerCase();
+    if (seen.has(key) || entry.content === 'See All') {
+      continue;
+    }
+
+    seen.add(key);
+    ordered.push(entry.content);
+  }
+
+  return ordered.slice(0, 6);
 }
 
 function classifyScreenKind(
@@ -259,17 +342,49 @@ function detectLayoutPattern(
 function buildImplementationChecklist(
   spec: Pick<
     ScreenSpec,
-    'slug' | 'screenKind' | 'layoutPattern' | 'copy' | 'flags' | 'variantOf' | 'variantNote'
+    | 'slug'
+    | 'screenKind'
+    | 'layoutPattern'
+    | 'copy'
+    | 'flags'
+    | 'variantOf'
+    | 'variantNote'
+    | 'sectionOrder'
   >,
 ): string[] {
   const checklist: string[] = [
-    `Open screens/${spec.slug}/reference.png before writing code`,
-    `Read screens/${spec.slug}/spec.json and use copy verbatim from screens/${spec.slug}/copy.json`,
-    `Implement in src/screens/${spec.slug}/index.tsx + styles.ts (unique to this slug)`,
+    `STOP — open screens/${spec.slug}/reference.png and keep it visible while coding`,
+    `Read screens/${spec.slug}/spec.json → forbiddenShortcuts before writing any layout code`,
+    `Read screens/${spec.slug}/copy.json — every string must appear verbatim in the UI`,
+    `Implement in src/screens/${spec.slug}/index.tsx + styles.ts (unique to this slug — no config wrapper)`,
   ];
+
+  if (spec.sectionOrder && spec.sectionOrder.length >= 2) {
+    checklist.push(
+      `Render sections top-to-bottom in this order: ${spec.sectionOrder.map((s) => `"${s}"`).join(' → ')}`,
+    );
+  }
+
+  if (spec.flags.hasImageAssets) {
+    checklist.push(
+      'Use Image components with paths from map.json asset fields — no solid-color placeholder blocks',
+    );
+  }
 
   if (spec.layoutPattern === 'white-card-on-navy') {
     checklist.push('White rounded card container on navy background (see map white rectangle)');
+  }
+
+  if (spec.screenKind === 'auth' && !spec.flags.hasWhiteCard) {
+    checklist.push(
+      'Do NOT use gradient header + white card overlay — match reference.png layout (often light background + centered logo)',
+    );
+  }
+
+  if (spec.screenKind === 'home') {
+    checklist.push(
+      'Match header, category chips, scroll direction (horizontal vs vertical), and tab bar from reference.png',
+    );
   }
 
   if (spec.flags.hasProgressStep) {
@@ -281,11 +396,17 @@ function buildImplementationChecklist(
   }
 
   if (spec.flags.hasBottomTabBar) {
-    checklist.push('Use shared BottomTabBar — do not inline a new tab bar');
+    checklist.push(
+      'Implement bottom tab bar matching reference.png — correct labels, order, active state, and center FAB if shown',
+    );
   }
 
   for (const label of spec.copy.labels.slice(0, 6)) {
     checklist.push(`Field label must read exactly: "${label}"`);
+  }
+
+  for (const placeholder of spec.copy.placeholders.slice(0, 4)) {
+    checklist.push(`Placeholder must read exactly: "${placeholder}"`);
   }
 
   for (const action of spec.copy.actions.slice(0, 3)) {
@@ -302,7 +423,9 @@ function buildImplementationChecklist(
     checklist.push(spec.variantNote);
   }
 
-  checklist.push(`Compare finished UI to screens/${spec.slug}/reference.png`);
+  checklist.push(
+    `Compare finished UI side-by-side with screens/${spec.slug}/reference.png — do not mark done if layout differs`,
+  );
 
   return checklist;
 }
@@ -350,6 +473,8 @@ export function buildScreenSpec(options: BuildScreenSpecOptions): {
     copyGrouped.placeholders.some((p) => /upload/i.test(p));
   const hasWhiteCard = detectWhiteCard(map);
   const hasBottomTabBar = detectBottomTabBar(texts);
+  const hasImageAssets = countImageAssets(map) > 0;
+  const sectionOrder = buildSectionOrder(texts);
 
   const screenKind = classifyScreenKind(slug, copyGrouped, allStrings);
   const layoutPattern = detectLayoutPattern(slug, map, screenKind, hasWhiteCard);
@@ -366,11 +491,13 @@ export function buildScreenSpec(options: BuildScreenSpecOptions): {
     layoutPattern,
     variantOf,
     variantNote,
+    sectionOrder: sectionOrder.length >= 2 ? sectionOrder : undefined,
     flags: {
       hasProgressStep,
       hasFileUpload,
       hasBottomTabBar,
       hasWhiteCard,
+      hasImageAssets,
     },
     copy: copyGrouped,
   };
@@ -378,7 +505,7 @@ export function buildScreenSpec(options: BuildScreenSpecOptions): {
   const spec: ScreenSpec = {
     ...specBase,
     implementationChecklist: [],
-    forbiddenShortcuts: buildForbiddenShortcuts(slug, variantOf, screenKind),
+    forbiddenShortcuts: buildForbiddenShortcuts(slug, variantOf, screenKind, specBase.flags),
   };
 
   spec.implementationChecklist = buildImplementationChecklist(spec);
@@ -397,12 +524,26 @@ function buildForbiddenShortcuts(
   slug: string,
   variantOf: string | null,
   screenKind: ScreenKind,
+  flags: ScreenSpec['flags'],
 ): string[] {
   const shortcuts = [
     'Do not route this slug through a shared FormScreenView / HomeScreenView / ListScreenView template',
     'Do not add this slug to screenDefinitions.json or generate-screens.mjs batch config',
     'Do not use a one-line wrapper component with a config object for this slug',
+    'Do not mark this screen complete without comparing to reference.png',
   ];
+
+  if (flags.hasImageAssets) {
+    shortcuts.push('Do not use backgroundColor placeholders where map.json lists asset paths');
+  }
+
+  if (screenKind === 'auth' && !flags.hasWhiteCard) {
+    shortcuts.push('Do not apply generic gradient-header + white-card auth shell — match reference.png');
+  }
+
+  if (screenKind === 'home') {
+    shortcuts.push('Do not reorder content sections differently from spec.json sectionOrder');
+  }
 
   if (variantOf) {
     shortcuts.push(`Do not merge with ${variantOf} as a step prop — screenKind is "${screenKind}"`);
@@ -431,10 +572,16 @@ export function buildScreenSpecDetailSection(spec: ScreenSpec): string {
     `- **Kind:** ${spec.screenKind}`,
     `- **Layout:** ${spec.layoutPattern}`,
     spec.variantOf ? `- **Variant of:** \`${spec.variantOf}\` — ${spec.variantNote ?? 'not a sequential step'}` : '',
+    spec.sectionOrder?.length
+      ? `- **Section order:** ${spec.sectionOrder.map((s) => `"${s}"`).join(' → ')}`
+      : '',
     `- **Spec:** \`screens/${spec.slug}/spec.json\` · **Copy:** \`screens/${spec.slug}/copy.json\` · **Ref:** \`screens/${spec.slug}/reference.png\``,
     '',
     '**Checklist:**',
     ...spec.implementationChecklist.map((item) => `- [ ] ${item}`),
+    '',
+    '**Forbidden shortcuts:**',
+    ...spec.forbiddenShortcuts.map((item) => `- ⛔ ${item}`),
     '',
   ].filter(Boolean);
 

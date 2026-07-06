@@ -7,6 +7,8 @@ import {
   DESIGN_REFERENCE_LAYOUT,
   FORBIDDEN_GENERIC_RENDERER,
   FORBIDDEN_TEMPLATE_BATCHING,
+  FORBIDDEN_VISUAL_SHORTCUTS,
+  MANDATORY_SCREEN_WORKFLOW,
 } from './design-reference';
 import {
   buildScreenSpecDetailSection,
@@ -65,6 +67,10 @@ Export target: **General** (stack-agnostic design context)
 ${FORBIDDEN_GENERIC_RENDERER}
 
 ${FORBIDDEN_TEMPLATE_BATCHING}
+
+${FORBIDDEN_VISUAL_SHORTCUTS}
+
+${MANDATORY_SCREEN_WORKFLOW}
 
 ## Copy fidelity
 
@@ -184,6 +190,8 @@ Build reusable components referenced across screens.
 
 Implement **all** screens in the confirmed stack — one unique implementation per slug.
 
+**You may not skip to the next slug until the current one matches \`reference.png\`.**
+
 ## Summary checklist
 
 ${screenBullets || '_No screens._'}
@@ -194,16 +202,16 @@ ${detailSections}
 
 ## Per screen
 
-1. Read \`screens/{slug}/spec.json\` and \`copy.json\` first
-2. Open \`screens/{slug}/reference.png\` before coding
-3. Implement idiomatic UI — not a shared template across slugs
-4. Use \`copy.json\` strings verbatim
-5. Match \`reference.png\` before marking complete
+Follow \`AGENTS.md\` → **Mandatory per-screen workflow** for every slug.
 
 ## Forbidden
 
 - Generic \`map.json\` runtime renderers
 - \`_templates/\`, \`screenDefinitions.json\`, \`generate-screens.mjs\` batch stubs
+- Solid-color blocks where map.json lists \`asset\` paths
+- Generic layout shells that diverge from \`reference.png\` for that slug
+- Reordering sections differently from \`spec.json\` → \`sectionOrder\`
+- Marking a screen done without side-by-side \`reference.png\` comparison
 - Treating slug suffixes (\`-2\`, \`-3\`) as sequential wizard steps
 `,
     'phases/04-navigation.md': `# Phase 04 — Navigation
@@ -222,13 +230,20 @@ Wire screen-to-screen navigation using the confirmed stack's router.
 `,
     'phases/05-qa.md': `# Phase 05 — QA
 
-Visual verification against design references.
+Visual verification against design references. **Phase 03 is not complete until this passes for every slug.**
 
 ## Per screen
 
 1. Render at design frame dimensions (see \`screens/{slug}/meta.json\`)
-2. Compare to \`screens/{slug}/reference.png\`
-3. Fix layout, typography, and color drift
+2. Open \`screens/{slug}/reference.png\` side-by-side with the running UI
+3. Verify section order, assets, copy, and layout pattern match reference
+4. Fix mismatches — do not defer
+
+## Rejection criteria
+
+- Color placeholders where design shows images
+- Wrong section order vs reference
+- Shared component diverges from reference for that slug
 
 ## Checklist
 

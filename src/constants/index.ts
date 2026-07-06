@@ -1,5 +1,5 @@
 export const PLUGIN_NAME = 'OpenContext';
-export const PLUGIN_VERSION = '1.4.1';
+export const PLUGIN_VERSION = '1.4.2';
 export const CONTEXT_FOLDER_NAME = 'context';
 
 export const UI_WIDTH = 360;
