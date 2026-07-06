@@ -81,6 +81,8 @@ export function buildCatalogEntries(
         copy: `screens/${slug}/copy.json`,
         assets: `screens/${slug}/assets.json`,
         decorative: `screens/${slug}/decorative.json`,
+        layerOrder: `screens/${slug}/layer-order.json`,
+        stub: `implementation-stubs/${slug}.tsx`,
       },
       frame: {
         width: Math.round(screen.bounds.width),

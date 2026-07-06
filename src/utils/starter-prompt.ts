@@ -69,7 +69,7 @@ ${variantGuidance}
 1. Read \`${contextPath}/AGENTS.md\` first — especially **Forbidden visual shortcuts** and **Mandatory per-screen workflow**.
 2. Read \`${contextPath}/BUILD.md\` and run every phase in \`${contextPath}/phases/\` (00 → 05).
 3. Implement **all ${input.screenCount} screens** from \`${contextPath}/catalog/screens.json\`.
-4. **Per slug (required order):** open \`reference.png\` → \`spec.json\` → \`assets.json\` → \`decorative.json\` (if present) → \`platform/react-native/views.json\` (for viewKinds used) → \`copy.json\` → \`map.json\`.
+4. **Per slug (required order):** open \`reference.png\` → \`spec.json\` (requirements + qa) → \`layer-order.json\` → \`assets.json\` → \`decorative.json\` (if present) → \`copy.json\` bindings → \`implementation-stubs/{slug}.tsx\` → \`platform/react-native/views.json\` → \`platform/react-native/fonts.json\` → \`map.json\`.
 5. Create **unique** \`src/screens/{slug}/index.tsx\` + \`styles.ts\` for each slug.
 6. Wire **PNG** assets from \`assets.json\` / map — no color placeholders for image or decorative nodes.
 7. Render decorative layers from \`decorative.json\` as absolute \`expo-image\` at map opacity (\`pointerEvents: 'none'\`).
@@ -78,7 +78,10 @@ ${variantGuidance}
 10. Extract shared UI into \`src/components/\` in phase 02 — but fix or override if a shared component diverges from \`reference.png\`.
 11. Load fonts from \`${contextPath}/shared/tokens.json\` (use \`expo-font\` — do not substitute system fonts).
 12. Do not add extra SafeArea \`paddingTop\` when \`contentArea.top\` is defined.
-13. Compare each screen side-by-side with \`reference.png\` before moving to the next slug.
+13. Compare each screen side-by-side with \`reference.png\` — pass \`spec.json\` → \`qa.maxPixelDiffPercent\` before moving on.
+14. Wire navigation from \`${contextPath}/navigation/wiring.json\`.
+15. See \`${contextPath}/examples/golden-sign-in/\` for worked auth pattern.
+16. Run \`node ${contextPath}/scripts/check-visual-shortcuts.mjs\` before marking phase 05 complete.
 
 Export target: **${target.label}**
 Work through the entire BUILD.md checklist without stopping for per-screen approval.`;

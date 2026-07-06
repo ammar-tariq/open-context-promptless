@@ -5,6 +5,7 @@ import {
   usePluginMessaging,
   postPluginMessage,
   requestScreenListRefresh,
+  usePreExportLintWatcher,
 } from '@/hooks/usePluginMessaging';
 import { createMessage } from '@/types/messages';
 import { beginExportDelivery } from '@/ui/utils/export-delivery';
@@ -196,6 +197,41 @@ function VariantPicker() {
   );
 }
 
+function PreExportLintBanner() {
+  const preExportLint = usePluginStore((state) => state.preExportLint);
+  const preExportLintLoading = usePluginStore((state) => state.preExportLintLoading);
+  const status = usePluginStore((state) => state.status);
+
+  if (status === 'loading' || preExportLintLoading || !preExportLint || preExportLint.issueCount === 0) {
+    return null;
+  }
+
+  const hasErrors = preExportLint.errors > 0;
+
+  return (
+    <div
+      className={`info-banner ${hasErrors ? 'info-banner--warning' : 'info-banner--neutral'}`}
+      role="status"
+    >
+      <p className="info-banner__title">
+        Export readiness ({preExportLint.errors} error{preExportLint.errors === 1 ? '' : 's'},{' '}
+        {preExportLint.warnings} warning{preExportLint.warnings === 1 ? '' : 's'})
+      </p>
+      <ul className="pre-export-lint__list">
+        {preExportLint.issues.slice(0, 8).map((issue, index) => (
+          <li key={`${issue.code}-${index}`} className={`pre-export-lint__item pre-export-lint__item--${issue.severity}`}>
+            {issue.screenName ? `[${issue.screenName}] ` : ''}
+            {issue.message}
+          </li>
+        ))}
+      </ul>
+      {preExportLint.issues.length > 8 ? (
+        <p className="info-banner__text">+ {preExportLint.issues.length - 8} more issue(s)</p>
+      ) : null}
+    </div>
+  );
+}
+
 function ProgressIndicator() {
   const status = usePluginStore((state) => state.status);
   const progress = usePluginStore((state) => state.progress);
@@ -322,6 +358,7 @@ function StatusMessage() {
 
 export function App() {
   usePluginMessaging();
+  usePreExportLintWatcher();
 
   const projectName = usePluginStore((state) => state.projectName);
   const exportTarget = usePluginStore((state) => state.exportTarget);
@@ -421,6 +458,8 @@ export function App() {
             onChange={(event) => setProjectName(event.target.value)}
           />
         </label>
+
+        <PreExportLintBanner />
 
         <button
           type="button"

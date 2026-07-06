@@ -8,6 +8,7 @@ import {
   getDefaultCheckedScreenIds,
   getDuplicateGroupsFromScreens,
   listPageScreens,
+  runPreExportLint,
   SelectionError,
   ExportError,
 } from '@/services';
@@ -76,6 +77,50 @@ figma.ui.onmessage = async (message: PluginMessage) => {
   switch (message.type) {
     case 'INIT': {
       sendInitState();
+      break;
+    }
+
+    case 'CHECK_EXPORT_READINESS': {
+      const payload = message.payload as
+        | {
+            selectedScreenIds?: string[];
+            variantMode?: string;
+            canonicalOverrides?: Record<string, string>;
+          }
+        | undefined;
+
+      const selectedScreenIds = payload?.selectedScreenIds;
+      if (!Array.isArray(selectedScreenIds)) {
+        break;
+      }
+
+      try {
+        const result = await runPreExportLint({
+          selectedScreenIds,
+          variantMode:
+            payload?.variantMode === 'all' || payload?.variantMode === 'custom'
+              ? payload.variantMode
+              : 'canonical',
+          canonicalOverrides: payload?.canonicalOverrides,
+        });
+
+        postToUi(createMessage('CHECK_EXPORT_READINESS_RESPONSE', result));
+      } catch (error) {
+        postToUi(
+          createMessage('CHECK_EXPORT_READINESS_RESPONSE', {
+            issueCount: 1,
+            errors: 1,
+            warnings: 0,
+            issues: [
+              {
+                severity: 'error',
+                code: 'LINT_FAILED',
+                message: error instanceof Error ? error.message : String(error),
+              },
+            ],
+          }),
+        );
+      }
       break;
     }
 

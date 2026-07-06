@@ -66,20 +66,23 @@ ${formatNavigationSection(navigationLinks, semantic.exportTarget)}
 - \`catalog/variants.json\` — Skipped duplicate variants (when using canonical export mode).
 - \`catalog/variant-groups.json\` — Name groups when multiple slugs share a Figma screen name.
 - \`screens/{slug}/spec.json\` — Screen kind, layout pattern, navigation hints, implementation checklist.
-- \`screens/{slug}/copy.json\` — Verbatim strings (labels, placeholders, actions) the agent must render.
+- \`screens/{slug}/copy.json\` — Verbatim strings + \`bindings\` (each string mapped to \`mapNodeId\`).
+- \`screens/{slug}/layer-order.json\` — Flat back-to-front paint order for decorative + content layers.
 - \`screens/{slug}/assets.json\` — Per-screen PNG asset shortlist (React Native: PNG only).
 - \`screens/{slug}/decorative.json\` — Decorative blobs, gradients, blur layers (when present).
+- \`implementation-stubs/{slug}.tsx\` — TODO checklist tied to map nodes (not runnable — guides implementation).
 - \`screens/{slug}/map.json\` — Design reference map with \`viewKind\`, \`role\`, assets (read while implementing — not runtime).
 - \`screens/{slug}/reference.png\` — Full-frame reference image for visual QA.
 - \`screens/{slug}/meta.json\` — Screen metadata (frame size, content area, route).
 - \`shared/tokens.json\` — Colors, typography, spacing tokens.
 - \`shared/components.json\` — Component summaries.
 - \`navigation/flows.json\` — Prototype navigation links.
+- \`navigation/wiring.json\` — Flat wiring table: fromSlug → toSlug with handler strings.
 - \`data.json\` — Full semantic design tree (debug / legacy compatibility).
 - \`assets/manifest.json\` — Catalog of exported PNG assets and which screens use them.
 - \`assets/registry-scaffold.ts\` — Starter \`require()\` registry for app integration.
 - \`assets/images/\` — Cropped raster exports (images + icon PNGs).
-${semantic.exportTarget === 'react-native' ? '- `assets/icons/` — _Not used on React Native_ (SVG skipped; use PNG paths from `assets.json`).\n- `platform/react-native/views.json` — viewKind → library/component bindings (implementation spec, NOT a runtime renderer).\n- `platform/react-native/packages.json` — Required npm packages and install command.\n- `export-warnings.json` — Missing or failed asset exports to fix before QA.\n- `navigation-notes.md` — React Navigation / Expo Router architecture with route names and navigate() mappings.' : '- `assets/icons/` — Exported SVG vector icons from the design.'}
+${semantic.exportTarget === 'react-native' ? '- `assets/icons/` — _Not used on React Native_ (SVG skipped; use PNG paths from `assets.json`).\n- `platform/react-native/views.json` — viewKind → library/component bindings (implementation spec, NOT a runtime renderer).\n- `platform/react-native/packages.json` — Required npm packages and install command.\n- `platform/react-native/fonts.json` — Figma font → expo-font / Google Fonts mapping.\n- `examples/golden-sign-in/` — Worked auth screen example (copy pattern, do not import at runtime).\n- `scripts/check-visual-shortcuts.mjs` — CI script to reject generic templates and missing assets.\n- `export-warnings.json` — Missing or failed asset exports to fix before QA.\n- `navigation-notes.md` — React Navigation / Expo Router architecture with route names and navigate() mappings.' : '- `assets/icons/` — Exported SVG vector icons from the design.'}
 
 ${formatPlatformSection(semantic)}
 
@@ -90,10 +93,11 @@ ${formatPlatformSection(semantic)}
 3. Select the matching export target in OpenContext when exporting (**React Native** for Expo/RN-specific \`AGENTS.md\` and prompts).
 4. Open \`PROMPT.md\`, copy the kickoff prompt, and paste it into Cursor, Claude Code, or your AI agent.
 5. The agent should read \`BUILD.md\` and \`AGENTS.md\`, then run all phases without per-screen prompts.
-6. For each screen: read \`spec.json\`, \`assets.json\`, \`decorative.json\` (if present), \`copy.json\`, and \`platform/react-native/views.json\` for viewKinds — then match \`reference.png\`.
-7. Compare implemented screens to \`screens/{slug}/reference.png\` during QA (phase 05).
+6. For each screen: read \`spec.json\` (requirements + qa thresholds), \`layer-order.json\`, \`assets.json\`, \`decorative.json\`, \`copy.json\` bindings, \`implementation-stubs/{slug}.tsx\`, then match \`reference.png\`.
+7. Compare implemented screens to \`screens/{slug}/reference.png\` — must pass \`spec.json\` → \`qa.maxPixelDiffPercent\`.
 8. Reference PNG paths in \`assets.json\` / \`assets/manifest.json\` when implementing images and icons.
-${semantic.exportTarget === 'react-native' ? '9. Follow `AGENTS.md` — unique `src/screens/{slug}/` per catalog entry; no `_templates/` batching.' : '9. For General exports, confirm the target stack in `PROMPT.md` or let the agent ask once before implementing.'}
+9. Wire navigation from \`navigation/wiring.json\`.
+${semantic.exportTarget === 'react-native' ? '10. Run `node context/scripts/check-visual-shortcuts.mjs` in CI. Follow `AGENTS.md` — unique `src/screens/{slug}/` per catalog entry.' : '10. For General exports, confirm the target stack in `PROMPT.md` or let the agent ask once before implementing.'}
 
 ## Notes
 

@@ -75,16 +75,22 @@ For **every** slug in \`catalog/screens.json\`, follow this sequence — no skip
 
 1. **Open** \`screens/{slug}/reference.png\` — study layout, colors, section order, icons, and images.
 2. **Read** \`screens/{slug}/spec.json\` → \`implementationChecklist\`, \`forbiddenShortcuts\`, and \`navigation\`.
-3. **Read** \`screens/{slug}/assets.json\` — PNG shortlist for this screen (React Native: PNG only).
+3. **Read** \`screens/{slug}/layer-order.json\` — flat paint order (decorative layers first).
 4. **Read** \`screens/{slug}/decorative.json\` when present — gradient blobs, blur layers, decorative PNGs.
 5. **Read** \`platform/react-native/views.json\` for each \`viewKind\` used on this screen (implementation spec — NOT a runtime renderer).
-6. **Read** \`screens/{slug}/copy.json\` — all user-visible strings must appear verbatim.
-7. **Read** \`screens/{slug}/map.json\` — note \`viewKind\`, \`role\`, \`asset\` paths, gradients, blur, and section order.
-8. **Implement** \`src/screens/{slug}/index.tsx\` + \`styles.ts\` unique to this slug.
-9. **Wire assets** from \`assets.json\` / map — no color placeholders for image or decorative nodes.
-10. **Compare** running UI to \`reference.png\` — fix mismatches before moving to the next slug.
+6. **Read** \`platform/react-native/fonts.json\` — load exact font families (do not substitute system fonts).
+7. **Read** \`screens/{slug}/copy.json\` → \`bindings\` — each string has \`mapNodeId\` for placement.
+8. **Read** \`implementation-stubs/{slug}.tsx\` — TODO checklist tied to map nodes (not runnable code).
+9. **Read** \`screens/{slug}/map.json\` — note \`viewKind\`, \`role\`, \`asset\` paths, gradients, blur, and section order.
+10. **Implement** \`src/screens/{slug}/index.tsx\` + \`styles.ts\` unique to this slug.
+11. **Wire assets** from \`assets.json\` / map — no color placeholders for image or decorative nodes.
+12. **Compare** running UI to \`reference.png\` — must pass \`spec.json\` → \`qa.maxPixelDiffPercent\` threshold.
 
 If \`spec.json\` lists \`sectionOrder\`, render sections in that exact top-to-bottom order.
+Check \`spec.json\` → \`requirements\` for linearGradient, blur, drawer, and bottomTabs flags.
+Run \`node context/scripts/check-visual-shortcuts.mjs\` in CI before merging.
+See \`examples/golden-sign-in/\` for a worked auth screen pattern.
+Wire navigation from \`navigation/wiring.json\` — one row per prototype link.
 `.trim();
 
 export const ASSETS_AND_QA = `

@@ -7,6 +7,10 @@ import {
   buildScreenAssetsManifest,
   buildScreenDecorativeManifest,
 } from '@/map/screen-assets-builder';
+import { buildLayerOrder } from '@/map/layer-order-builder';
+import { buildImplementationStub } from '@/map/implementation-stub-builder';
+import { buildGoldenSignInExample, pickGoldenExampleSource } from '@/map/golden-example-builder';
+import { buildNavigationWiring } from '@/map/navigation-wiring-builder';
 import { buildScreenSpec, buildVariantGroups } from '@/map/screen-spec-builder';
 import {
   buildCatalogEntries,
@@ -24,6 +28,8 @@ import {
   generateReactNativePackagesJson,
   generateReactNativeViewsJson,
 } from '@/platform/react-native/view-dictionary';
+import { generateReactNativeFontsJson } from '@/platform/react-native/font-mapping';
+import { CHECK_VISUAL_SHORTCUTS_SCRIPT } from '@/export-scripts/check-visual-shortcuts';
 import { generatePromptMd } from '@/utils/starter-prompt';
 import type { ExportProgressHandler } from './export-service';
 
@@ -74,6 +80,7 @@ export async function buildScreenPackage(input: ScreenPackageInput): Promise<Scr
   const specs: ScreenSpec[] = [];
   const maps: ScreenMap[] = [];
   const screenAssetsManifests = [];
+  const copiesBySlug = new Map<string, ReturnType<typeof buildScreenSpec>['copy']>();
 
   const variantGroups = buildVariantGroups(
     selectedScreens.map((screen) => ({
@@ -114,6 +121,10 @@ export async function buildScreenPackage(input: ScreenPackageInput): Promise<Scr
     });
 
     specs.push(spec);
+    copiesBySlug.set(slug, copy);
+
+    const layerOrder = buildLayerOrder(map);
+    const stub = buildImplementationStub(map, copy, layerOrder);
 
     const assetsManifest = buildScreenAssetsManifest(map);
     screenAssetsManifests.push(assetsManifest);
@@ -132,6 +143,16 @@ export async function buildScreenPackage(input: ScreenPackageInput): Promise<Scr
     files.push({
       path: `screens/${slug}/copy.json`,
       content: JSON.stringify(copy, null, 2),
+    });
+
+    files.push({
+      path: `screens/${slug}/layer-order.json`,
+      content: JSON.stringify(layerOrder, null, 2),
+    });
+
+    files.push({
+      path: `implementation-stubs/${slug}.tsx`,
+      content: stub,
     });
 
     files.push({
@@ -169,6 +190,8 @@ export async function buildScreenPackage(input: ScreenPackageInput): Promise<Scr
             copy: `screens/${slug}/copy.json`,
             assets: `screens/${slug}/assets.json`,
             decorative: `screens/${slug}/decorative.json`,
+            layerOrder: `screens/${slug}/layer-order.json`,
+            stub: `implementation-stubs/${slug}.tsx`,
             reference: `screens/${slug}/reference.png`,
           },
         },
@@ -212,7 +235,40 @@ export async function buildScreenPackage(input: ScreenPackageInput): Promise<Scr
       path: 'platform/react-native/packages.json',
       content: generateReactNativePackagesJson(),
     });
+
+    files.push({
+      path: 'platform/react-native/fonts.json',
+      content: generateReactNativeFontsJson(design.typography),
+    });
+
+    files.push({
+      path: 'scripts/check-visual-shortcuts.mjs',
+      content: CHECK_VISUAL_SHORTCUTS_SCRIPT,
+    });
+
+    const goldenSource = pickGoldenExampleSource(specs);
+    if (goldenSource) {
+      const goldenMap = maps.find((entry) => entry.screen.slug === goldenSource.slug);
+      const goldenCopy = copiesBySlug.get(goldenSource.slug);
+      if (goldenMap && goldenCopy) {
+        const goldenFiles = buildGoldenSignInExample(
+          goldenSource.slug,
+          goldenMap,
+          goldenSource,
+          goldenCopy,
+        );
+        for (const [path, content] of Object.entries(goldenFiles)) {
+          files.push({ path, content });
+        }
+      }
+    }
   }
+
+  const wiring = buildNavigationWiring(semantic);
+  files.push({
+    path: 'navigation/wiring.json',
+    content: JSON.stringify(wiring, null, 2),
+  });
 
   files.push({
     path: 'catalog/screens.json',

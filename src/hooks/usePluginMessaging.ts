@@ -1,6 +1,7 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { createMessage } from '@/types/messages';
 import type {
+  CheckExportReadinessResponsePayload,
   ExportFilePayload,
   GenerateErrorPayload,
   InitResponsePayload,
@@ -47,11 +48,22 @@ function isExportFilePayload(payload: unknown): payload is ExportFilePayload {
   );
 }
 
+function isCheckExportReadinessResponse(
+  payload: unknown,
+): payload is CheckExportReadinessResponsePayload {
+  return (
+    typeof payload === 'object' &&
+    payload !== null &&
+    'issues' in payload &&
+    Array.isArray((payload as CheckExportReadinessResponsePayload).issues)
+  );
+}
+
 /**
  * Bridges Figma plugin messages with the React UI store.
  */
 export function usePluginMessaging(): void {
-  const { setScreensState, setProgress, setSuccess, setError } = usePluginStore();
+  const { setScreensState, setProgress, setSuccess, setError, setPreExportLint } = usePluginStore();
 
   useEffect(() => {
     const handleMessage = async (event: MessageEvent<{ pluginMessage: PluginMessage }>) => {
@@ -62,6 +74,11 @@ export function usePluginMessaging(): void {
         case 'INIT_RESPONSE':
           if (isInitResponsePayload(message.payload)) {
             setScreensState(message.payload);
+          }
+          break;
+        case 'CHECK_EXPORT_READINESS_RESPONSE':
+          if (isCheckExportReadinessResponse(message.payload)) {
+            setPreExportLint(message.payload);
           }
           break;
         case 'GENERATE_PROGRESS':
@@ -130,7 +147,55 @@ export function usePluginMessaging(): void {
     return () => {
       window.onmessage = null;
     };
-  }, [setScreensState, setProgress, setSuccess, setError]);
+  }, [setScreensState, setProgress, setSuccess, setError, setPreExportLint]);
+}
+
+export function requestPreExportLint(): void {
+  const state = usePluginStore.getState();
+  if (state.checkedScreenIds.length === 0) {
+    state.setPreExportLint(null);
+    return;
+  }
+
+  state.setPreExportLintLoading(true);
+  postPluginMessage(
+    createMessage('CHECK_EXPORT_READINESS', {
+      selectedScreenIds: state.checkedScreenIds,
+      variantMode: state.variantMode,
+      canonicalOverrides: state.variantMode === 'custom' ? state.canonicalOverrides : undefined,
+    }),
+  );
+}
+
+/**
+ * Debounced pre-export lint when selection changes.
+ */
+export function usePreExportLintWatcher(): void {
+  const checkedScreenIds = usePluginStore((s) => s.checkedScreenIds);
+  const variantMode = usePluginStore((s) => s.variantMode);
+  const canonicalOverrides = usePluginStore((s) => s.canonicalOverrides);
+  const status = usePluginStore((s) => s.status);
+  const timerRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (status === 'loading') {
+      return;
+    }
+
+    if (timerRef.current !== null) {
+      window.clearTimeout(timerRef.current);
+    }
+
+    timerRef.current = window.setTimeout(() => {
+      requestPreExportLint();
+    }, 400);
+
+    return () => {
+      if (timerRef.current !== null) {
+        window.clearTimeout(timerRef.current);
+      }
+    };
+  }, [checkedScreenIds, variantMode, canonicalOverrides, status]);
 }
 
 export function requestScreenListRefresh(): void {

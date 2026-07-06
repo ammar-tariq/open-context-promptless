@@ -3,7 +3,7 @@ import type { ExportTargetId } from '@/constants/export-targets';
 import { DEFAULT_EXPORT_TARGET } from '@/constants/export-targets';
 import type { ExportSummary } from '@/types';
 import type { VariantExportMode } from '@/types/map';
-import type { DuplicateScreenGroup, GenerateErrorPayload, ScreenSummary } from '@/types/messages';
+import type { DuplicateScreenGroup, GenerateErrorPayload, CheckExportReadinessResponsePayload, ScreenSummary } from '@/types/messages';
 
 export type UiStatus = 'idle' | 'loading' | 'success' | 'error';
 
@@ -22,6 +22,8 @@ interface PluginState {
   summary: ExportSummary | null;
   starterPrompt: string | null;
   error: GenerateErrorPayload | null;
+  preExportLint: CheckExportReadinessResponsePayload | null;
+  preExportLintLoading: boolean;
   setProjectName: (name: string) => void;
   setExportTarget: (exportTarget: ExportTargetId) => void;
   setScreensState: (payload: {
@@ -40,6 +42,8 @@ interface PluginState {
   setProgress: (stage: string, progress: number) => void;
   setSuccess: (summary: ExportSummary, starterPrompt: string) => void;
   setError: (error: GenerateErrorPayload) => void;
+  setPreExportLint: (result: CheckExportReadinessResponsePayload | null) => void;
+  setPreExportLintLoading: (loading: boolean) => void;
   resetStatus: () => void;
 }
 
@@ -79,6 +83,8 @@ export const usePluginStore = create<PluginState>((set) => ({
   summary: null,
   starterPrompt: null,
   error: null,
+  preExportLint: null,
+  preExportLintLoading: false,
   setProjectName: (projectName) => set({ projectName }),
   setExportTarget: (exportTarget) => set({ exportTarget }),
   setScreensState: ({
@@ -157,6 +163,8 @@ export const usePluginStore = create<PluginState>((set) => ({
       status: 'error',
       error,
     }),
+  setPreExportLint: (preExportLint) => set({ preExportLint, preExportLintLoading: false }),
+  setPreExportLintLoading: (preExportLintLoading) => set({ preExportLintLoading }),
   resetStatus: () =>
     set({
       status: 'idle',

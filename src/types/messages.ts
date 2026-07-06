@@ -5,6 +5,8 @@ import type { VariantExportMode } from './map';
 export type PluginMessageType =
   | 'INIT'
   | 'INIT_RESPONSE'
+  | 'CHECK_EXPORT_READINESS'
+  | 'CHECK_EXPORT_READINESS_RESPONSE'
   | 'GENERATE_CONTEXT'
   | 'GENERATE_PROGRESS'
   | 'EXPORT_FILE'
@@ -37,6 +39,27 @@ export interface InitResponsePayload {
   defaultProjectName: string;
   defaultCheckedScreenIds: string[];
   duplicateGroups: DuplicateScreenGroup[];
+}
+
+export interface PreExportLintIssuePayload {
+  severity: 'error' | 'warning' | 'info';
+  code: string;
+  message: string;
+  screenId?: string;
+  screenName?: string;
+}
+
+export interface CheckExportReadinessPayload {
+  selectedScreenIds: string[];
+  variantMode: VariantExportMode;
+  canonicalOverrides?: Record<string, string>;
+}
+
+export interface CheckExportReadinessResponsePayload {
+  issueCount: number;
+  errors: number;
+  warnings: number;
+  issues: PreExportLintIssuePayload[];
 }
 
 export interface GenerateContextPayload {

@@ -1,4 +1,6 @@
 import type {
+  CopyBinding,
+  CopyBindingCategory,
   LayoutPattern,
   MapViewNode,
   ScreenCopyManifest,
@@ -24,8 +26,11 @@ export interface BuildScreenSpecOptions {
 }
 
 interface CollectedText {
+  mapNodeId: string;
+  figmaId: string;
   content: string;
   fontSize: number;
+  fontFamily?: string;
   name: string;
   topPercent: number | null;
 }
@@ -80,8 +85,11 @@ function collectVisibleTexts(map: ScreenMap): CollectedText[] {
     }
 
     texts.push({
+      mapNodeId: node.id,
+      figmaId: node.figmaId,
       content,
       fontSize: node.text.fontSize,
+      fontFamily: node.text.fontFamily,
       name: node.name,
       topPercent: node.placement.absolute.topPercent ?? null,
     });
@@ -161,6 +169,43 @@ function categorizeCopy(texts: CollectedText[]): ScreenCopyManifest['copy'] {
     placeholders: uniqueStrings(placeholders),
     actions: uniqueStrings(actions),
     body: uniqueStrings(body),
+  };
+}
+
+function classifyBindingCategory(content: string, entry: CollectedText, grouped: ScreenCopyManifest['copy']): CopyBindingCategory {
+  if (grouped.headings.includes(content)) return 'heading';
+  if (grouped.labels.includes(content)) return 'label';
+  if (grouped.placeholders.includes(content)) return 'placeholder';
+  if (grouped.actions.includes(content)) return 'action';
+  if (grouped.body.includes(content)) return 'body';
+
+  if (entry.fontSize >= 20) return 'heading';
+  if (/^Enter /i.test(content)) return 'placeholder';
+  if (entry.name.toLowerCase().includes('button')) return 'action';
+  return 'body';
+}
+
+function buildCopyBindings(texts: CollectedText[], grouped: ScreenCopyManifest['copy']): CopyBinding[] {
+  return texts.map((entry) => ({
+    mapNodeId: entry.mapNodeId,
+    figmaId: entry.figmaId,
+    name: entry.name,
+    content: entry.content,
+    category: classifyBindingCategory(entry.content, entry, grouped),
+    topPercent: entry.topPercent,
+    fontSize: entry.fontSize,
+    ...(entry.fontFamily ? { fontFamily: entry.fontFamily } : {}),
+  }));
+}
+
+function buildQaThresholds(slug: string, screenKind: ScreenKind): ScreenSpec['qa'] {
+  const maxPixelDiffPercent =
+    screenKind === 'auth' || screenKind === 'splash' ? 3 : screenKind.startsWith('modal-') ? 4 : 5;
+
+  return {
+    maxPixelDiffPercent,
+    compareTo: `screens/${slug}/reference.png`,
+    notes: 'Run side-by-side visual comparison before marking screen done. Lower threshold = stricter QA.',
   };
 }
 
@@ -431,12 +476,14 @@ function buildImplementationChecklist(
     | 'sectionOrder'
     | 'navigation'
     | 'viewKindsUsed'
+    | 'qa'
   >,
 ): string[] {
   const checklist: string[] = [
     `STOP — open screens/${spec.slug}/reference.png and keep it visible while coding`,
     `Read screens/${spec.slug}/spec.json → forbiddenShortcuts before writing any layout code`,
-    `Read screens/${spec.slug}/copy.json — every string must appear verbatim in the UI`,
+    `Read screens/${spec.slug}/layer-order.json — render decorative layers in paint order`,
+    `Read screens/${spec.slug}/copy.json bindings — each string has mapNodeId for placement`,
     `Read platform/react-native/views.json — look up viewKind for each node in map.json`,
     `Read screens/${spec.slug}/assets.json and decorative.json — wire every PNG path listed`,
   ];
@@ -540,7 +587,7 @@ function buildImplementationChecklist(
   }
 
   checklist.push(
-    `Compare finished UI side-by-side with screens/${spec.slug}/reference.png — do not mark done if layout differs`,
+    `Compare finished UI side-by-side with screens/${spec.slug}/reference.png — max ${spec.qa.maxPixelDiffPercent}% pixel diff`,
   );
 
   return checklist;
@@ -621,6 +668,15 @@ export function buildScreenSpec(options: BuildScreenSpecOptions): {
     requiredNavigators: buildRequiredNavigators(flags, slug, drawerMenuSlug),
   };
 
+  const requirements = {
+    linearGradient: decorativeFlags.hasLinearGradient,
+    blur: decorativeFlags.hasBlur,
+    drawer: Boolean(drawerMenuSlug) && (slug === drawerMenuSlug || /home|menu/i.test(slug)),
+    bottomTabs: hasBottomTabBar,
+  };
+
+  const qa = buildQaThresholds(slug, screenKind);
+
   const specBase = {
     slug,
     name: map.screen.name,
@@ -635,6 +691,8 @@ export function buildScreenSpec(options: BuildScreenSpecOptions): {
     sectionOrder: sectionOrder.length >= 2 ? sectionOrder : undefined,
     flags,
     copy: copyGrouped,
+    requirements,
+    qa,
     viewKindsUsed,
   };
 
@@ -651,6 +709,7 @@ export function buildScreenSpec(options: BuildScreenSpecOptions): {
     name: map.screen.name,
     strings: allStrings,
     copy: copyGrouped,
+    bindings: buildCopyBindings(texts, copyGrouped),
   };
 
   return { spec, copy };

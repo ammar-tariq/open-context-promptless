@@ -149,6 +149,52 @@ export interface ScreenCopyFields {
   body: string[];
 }
 
+export type CopyBindingCategory = 'heading' | 'label' | 'placeholder' | 'action' | 'body';
+
+export interface CopyBinding {
+  mapNodeId: string;
+  figmaId: string;
+  name: string;
+  content: string;
+  category: CopyBindingCategory;
+  topPercent: number | null;
+  fontSize: number;
+  fontFamily?: string;
+}
+
+export interface ScreenRequirements {
+  linearGradient: boolean;
+  blur: boolean;
+  drawer: boolean;
+  bottomTabs: boolean;
+}
+
+export interface ScreenQaThresholds {
+  /** Max allowed pixel diff % vs reference.png before screen fails QA */
+  maxPixelDiffPercent: number;
+  compareTo: string;
+  notes?: string;
+}
+
+export interface LayerOrderEntry {
+  id: string;
+  figmaId: string;
+  name: string;
+  viewKind: ViewKind;
+  role: MapNodeRole;
+  zIndex: number;
+  topPercent: number | null;
+  asset?: string;
+  opacity?: number;
+  visible: boolean;
+}
+
+export interface ScreenLayerOrderManifest {
+  slug: string;
+  readme: string;
+  layers: LayerOrderEntry[];
+}
+
 export interface ScreenNavigationHints {
   bottomTabBar: boolean;
   drawerMenuSlug: string | null;
@@ -179,6 +225,8 @@ export interface ScreenSpec {
   };
   sectionOrder?: string[];
   copy: ScreenCopyFields;
+  requirements: ScreenRequirements;
+  qa: ScreenQaThresholds;
   viewKindsUsed: ViewKind[];
   implementationChecklist: string[];
   forbiddenShortcuts: string[];
@@ -244,6 +292,8 @@ export interface ScreenCopyManifest {
   name: string;
   strings: string[];
   copy: ScreenCopyFields;
+  /** Maps each user-visible string to its map.json node — use for placement */
+  bindings: CopyBinding[];
 }
 
 export interface ScreenCatalogEntry {
@@ -263,6 +313,8 @@ export interface ScreenCatalogEntry {
     copy: string;
     assets: string;
     decorative: string;
+    layerOrder: string;
+    stub: string;
   };
   frame: { width: number; height: number };
 }
