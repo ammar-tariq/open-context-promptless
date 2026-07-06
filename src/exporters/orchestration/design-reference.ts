@@ -27,6 +27,20 @@ When implementing layout manually:
 9. Use \`placementPixels\` only for QA on the design frame (${CONTEXT_FOLDER_NAME}/screen.frame), not as the primary layout API.
 `.trim();
 
+export const FORBIDDEN_TEMPLATE_BATCHING = `
+## Forbidden template batching (React Native + General)
+
+- **Do NOT** create \`src/screens/_templates/\` views shared across multiple catalog slugs.
+- **Do NOT** create \`screenDefinitions.json\` (or similar) mapping many slugs → one template + config.
+- **Do NOT** run \`generate-screens.mjs\` / codegen that writes identical \`index.tsx\` stubs for every slug.
+- **Do NOT** reuse one \`*ScreenView\` component with a \`step\` or \`variant\` prop across \`create-league\`, \`create-league-2\`, etc.
+
+Each catalog slug is a **separate screen** with its own \`src/screens/{slug}/\` implementation.
+
+Read \`screens/{slug}/spec.json\` for \`screenKind\` — suffixes like \`-2\` are **not** wizard step numbers.
+Use \`screens/{slug}/copy.json\` for **verbatim** labels, placeholders, and button text.
+`.trim();
+
 export const ASSETS_AND_QA = `
 ## Assets
 
@@ -37,4 +51,5 @@ export const ASSETS_AND_QA = `
 
 - Compare each finished screen to \`screens/{slug}/reference.png\` before marking it done.
 - Follow \`phases/05-qa.md\` for the full checklist.
+- Verify every string in \`screens/{slug}/copy.json\` appears verbatim in the implemented UI.
 `.trim();

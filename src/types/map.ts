@@ -93,16 +93,75 @@ export interface ScreenMap {
   views: MapViewNode[];
 }
 
+export type ScreenKind =
+  | 'form-wizard-step'
+  | 'form'
+  | 'modal-success'
+  | 'modal-error'
+  | 'modal-overlay'
+  | 'auth'
+  | 'splash'
+  | 'home'
+  | 'list'
+  | 'detail'
+  | 'screen';
+
+export type LayoutPattern =
+  | 'white-card-on-navy'
+  | 'modal-overlay'
+  | 'full-bleed'
+  | 'standard';
+
+export interface ScreenCopyFields {
+  headings: string[];
+  labels: string[];
+  placeholders: string[];
+  actions: string[];
+  body: string[];
+}
+
+export interface ScreenCopyManifest {
+  slug: string;
+  name: string;
+  strings: string[];
+  copy: ScreenCopyFields;
+}
+
+export interface ScreenSpec {
+  slug: string;
+  name: string;
+  figmaId: string;
+  route: string;
+  screenKind: ScreenKind;
+  layoutPattern: LayoutPattern;
+  variantOf: string | null;
+  variantNote?: string;
+  flags: {
+    hasProgressStep: boolean;
+    hasFileUpload: boolean;
+    hasBottomTabBar: boolean;
+    hasWhiteCard: boolean;
+  };
+  copy: ScreenCopyFields;
+  implementationChecklist: string[];
+  forbiddenShortcuts: string[];
+}
+
 export interface ScreenCatalogEntry {
   id: string;
   slug: string;
   name: string;
   figmaId: string;
   route: string;
+  screenKind?: ScreenKind;
+  layoutPattern?: LayoutPattern;
+  variantOf?: string | null;
   paths: {
     map: string;
     reference: string;
     meta: string;
+    spec: string;
+    copy: string;
   };
   frame: { width: number; height: number };
 }

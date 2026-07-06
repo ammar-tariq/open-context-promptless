@@ -1,16 +1,45 @@
 import type { ExportTargetId } from '@/constants/export-targets';
 import { getExportTargetDefinition } from '@/constants/export-targets';
 import { CONTEXT_FOLDER_NAME } from '@/constants';
+import type { VariantExportMode } from '@/types/map';
 
 export interface StarterPromptInput {
   projectName: string;
   exportTarget: ExportTargetId;
   screenCount: number;
+  uniqueScreenNames?: number;
+  variantMode?: VariantExportMode;
+  skippedVariantCount?: number;
+}
+
+function buildVariantGuidance(input: StarterPromptInput): string {
+  const lines: string[] = [];
+
+  if (input.variantMode === 'all' && input.uniqueScreenNames && input.uniqueScreenNames < input.screenCount) {
+    lines.push(
+      `**Variant warning:** ${input.screenCount} slugs map to ~${input.uniqueScreenNames} unique screen names.`,
+      `- Read \`screens/{slug}/spec.json\` → \`screenKind\` for EVERY slug.`,
+      `- \`create-league-2\` is NOT "step 2" — it may be a success modal (\`modal-success\`).`,
+      `- See \`catalog/variant-groups.json\` for name groupings.`,
+    );
+  } else if (input.skippedVariantCount && input.skippedVariantCount > 0) {
+    lines.push(
+      `**Variants:** ${input.skippedVariantCount} duplicate frames skipped (see \`catalog/variants.json\`).`,
+      `- Implement only the canonical slugs in \`catalog/screens.json\`.`,
+    );
+  } else {
+    lines.push(
+      `- Check \`screens/{slug}/spec.json\` if multiple slugs share a similar name.`,
+    );
+  }
+
+  return lines.join('\n');
 }
 
 function generateReactNativeStarterPrompt(input: StarterPromptInput): string {
   const target = getExportTargetDefinition('react-native');
   const contextPath = `./${CONTEXT_FOLDER_NAME}`;
+  const variantGuidance = buildVariantGuidance(input);
 
   return `I exported Figma design context for **${input.projectName}** into \`${contextPath}/\` in this repository.
 
@@ -23,17 +52,23 @@ function generateReactNativeStarterPrompt(input: StarterPromptInput): string {
 
 **Then build the full app autonomously — do not ask me screen-by-screen:**
 
-**Forbidden:** Do NOT build a generic \`map.json\` renderer, layout engine, or codegen scripts that stub every screen with \`<MapScreen map={...} />\`. Implement **real typed React Native screens**.
+**Forbidden:**
+- Generic \`map.json\` renderers or layout engines
+- \`src/screens/_templates/\` shared across multiple slugs
+- \`screenDefinitions.json\` + \`generate-screens.mjs\` codegen stubs
+- \`<FormScreenView step={n} />\` or similar config wrappers
 
-1. Read \`${contextPath}/AGENTS.md\` first — folder structure, naming, and forbidden patterns.
+${variantGuidance}
+
+1. Read \`${contextPath}/AGENTS.md\` first.
 2. Read \`${contextPath}/BUILD.md\` and run every phase in \`${contextPath}/phases/\` (00 → 05).
 3. Implement **all ${input.screenCount} screens** from \`${contextPath}/catalog/screens.json\`.
-4. For each screen, create \`src/screens/{slug}/index.tsx\`, \`styles.ts\`, and optional \`components/\` — see \`AGENTS.md\`.
-5. Use \`${contextPath}/screens/{slug}/map.json\` and \`reference.png\` as **design reference while coding** — not as a runtime layout format.
-6. Extract shared UI (tab bar, buttons, headers) into \`src/components/\` in phase 02 — reuse them on every screen.
-7. Load fonts from \`${contextPath}/shared/tokens.json\`. Do not substitute system fonts.
-8. Do not add extra SafeArea \`paddingTop\` when the map already defines \`contentArea.top\`.
-9. Copy assets from \`${contextPath}/assets/\` into the project.
+4. **Per slug:** read \`screens/{slug}/spec.json\` → \`implementationChecklist\`, then \`copy.json\`, then open \`reference.png\`.
+5. Create **unique** \`src/screens/{slug}/index.tsx\` + \`styles.ts\` for each slug.
+6. Use \`copy.json\` labels, placeholders, and button text **verbatim**.
+7. Extract shared UI into \`src/components/\` in phase 02 — but never replace per-slug screens with one template.
+8. Load fonts from \`${contextPath}/shared/tokens.json\`.
+9. Do not add extra SafeArea \`paddingTop\` when \`contentArea.top\` is defined.
 10. Match each screen to \`reference.png\` before marking it done.
 
 Export target: **${target.label}**
@@ -43,6 +78,7 @@ Work through the entire BUILD.md checklist without stopping for per-screen appro
 function generateGenericStarterPrompt(input: StarterPromptInput): string {
   const target = getExportTargetDefinition(input.exportTarget);
   const contextPath = `./${CONTEXT_FOLDER_NAME}`;
+  const variantGuidance = buildVariantGuidance(input);
 
   return `I exported Figma design context for **${input.projectName}** into \`${contextPath}/\` in this repository.
 
@@ -52,18 +88,20 @@ function generateGenericStarterPrompt(input: StarterPromptInput): string {
 **Before you implement any screens:**
 1. Confirm the target stack (see above or ask once).
 2. Scaffold the application in this repository if one does not exist yet.
-3. Confirm the OpenContext export is at \`${contextPath}/\` (\`BUILD.md\`, \`catalog/screens.json\`, \`screens/\`).
+3. Confirm the OpenContext export is at \`${contextPath}/\`.
 
 **Then build the full app autonomously — do not ask me screen-by-screen:**
 
-**Forbidden:** Do NOT build a generic \`map.json\` runtime renderer or codegen scripts that stub every screen. Implement **proper UI code** for the confirmed stack.
+**Forbidden:** Generic \`map.json\` runtime renderers, \`_templates/\` batching, or codegen stub scripts.
+
+${variantGuidance}
 
 1. Read \`${contextPath}/AGENTS.md\` and \`${contextPath}/BUILD.md\`.
 2. Run every phase in \`${contextPath}/phases/\` in order (00 → 05).
 3. Implement **all ${input.screenCount} screens** from \`${contextPath}/catalog/screens.json\`.
-4. Use \`${contextPath}/screens/{slug}/map.json\` and \`reference.png\` as **design reference while coding** — not as a runtime layout format.
-5. Apply idiomatic patterns for the confirmed stack (components, styles, folder structure).
-6. Copy assets from \`${contextPath}/assets/\` into the project.
+4. **Per slug:** read \`screens/{slug}/spec.json\` and \`copy.json\`, open \`reference.png\`, then implement unique UI.
+5. Use \`copy.json\` strings verbatim.
+6. Copy assets from \`${contextPath}/assets/\`.
 7. Match each screen to \`reference.png\` before marking it done.
 
 Export target: **${target.label}**
@@ -72,7 +110,6 @@ Work through the entire BUILD.md checklist without stopping for per-screen appro
 
 /**
  * Ready-to-paste kickoff prompt for AI coding agents.
- * Assumes the exported package lives at ./context in the target repo.
  */
 export function generateStarterPrompt(input: StarterPromptInput): string {
   if (input.exportTarget === 'react-native') {
@@ -86,8 +123,15 @@ export function generatePromptMd(input: StarterPromptInput): string {
   const isRn = input.exportTarget === 'react-native';
 
   const stackNote = isRn
-    ? 'This export targets **React Native (Expo + TypeScript)**. The prompt below includes stack-specific structure and rules.'
-    : 'Fill in **Target stack** in the prompt below if you already know it (e.g. `React Native (Expo)`, `Next.js`). Otherwise the agent will inspect the repo or ask you once.';
+    ? 'This export targets **React Native (Expo + TypeScript)**. Each screen includes `spec.json` and `copy.json`.'
+    : 'Fill in **Target stack** in the prompt below if you already know it. Each screen includes `spec.json` and `copy.json`.';
+
+  const variantNote =
+    input.variantMode === 'all' && input.uniqueScreenNames && input.uniqueScreenNames < input.screenCount
+      ? `\n\n> **Note:** This export includes **${input.screenCount} variant slugs** (${input.uniqueScreenNames} unique names). Read \`spec.json\` → \`screenKind\` for each — suffixes are not wizard steps.`
+      : input.skippedVariantCount
+        ? `\n\n> **Note:** ${input.skippedVariantCount} duplicate variants were skipped. See \`catalog/variants.json\`.`
+        : '';
 
   return `# Agent Kickoff Prompt
 
@@ -98,7 +142,7 @@ Copy the block below into Cursor, Claude Code, Codex, or your AI coding agent **
 1. Create or open your application repository.
 2. Copy this entire \`context/\` folder to \`./context\` at the repository root.
 3. ${stackNote}
-4. Paste the prompt below into your agent.
+4. Paste the prompt below into your agent.${variantNote}
 
 ---
 
@@ -110,7 +154,7 @@ ${prompt}
 
 ## What happens next
 
-The agent should confirm the stack (General export only), scaffold if needed, then follow \`BUILD.md\` through all phases — implementing **real screens**, not a JSON layout engine.
+The agent should read \`spec.json\` + \`copy.json\` per slug, implement **unique** screens (no template batching), and match each \`reference.png\`.
 
 Generated by OpenContext.
 `;

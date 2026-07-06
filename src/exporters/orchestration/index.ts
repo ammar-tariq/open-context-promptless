@@ -1,7 +1,7 @@
 import type { ExportTargetId } from '@/constants/export-targets';
 import type { ParsedDesign } from '@/types';
 import type { SemanticDesign } from '@/types/semantic';
-import type { ScreenCatalogEntry, VariantGroupEntry } from '@/types/map';
+import type { ScreenCatalogEntry, ScreenSpec, VariantGroupEntry } from '@/types/map';
 import { toRouteName } from '@/utils/route-names';
 import {
   generateGenericAgentsMd,
@@ -48,28 +48,37 @@ export function generatePhaseFiles(
   semantic: SemanticDesign,
   design: ParsedDesign,
   catalog: ScreenCatalogEntry[],
+  specs: ScreenSpec[] = [],
 ): Record<string, string> {
   return resolveExportTarget(semantic) === 'react-native'
-    ? generateReactNativePhaseFiles(semantic, design, catalog)
-    : generateGenericPhaseFiles(semantic, design, catalog);
+    ? generateReactNativePhaseFiles(semantic, design, catalog, specs)
+    : generateGenericPhaseFiles(semantic, design, catalog, specs);
 }
 
 export function buildCatalogEntries(
   screens: Array<{ id: string; name: string; bounds: { width: number; height: number } }>,
   slugByScreenId: Map<string, string>,
+  specsBySlug: Map<string, ScreenSpec> = new Map(),
 ): ScreenCatalogEntry[] {
   return screens.map((screen) => {
     const slug = slugByScreenId.get(screen.id) ?? screen.id;
+    const spec = specsBySlug.get(slug);
+
     return {
       id: slug,
       slug,
       name: screen.name,
       figmaId: screen.id,
       route: toRouteName(screen.name),
+      screenKind: spec?.screenKind,
+      layoutPattern: spec?.layoutPattern,
+      variantOf: spec?.variantOf ?? null,
       paths: {
         map: `screens/${slug}/map.json`,
         reference: `screens/${slug}/reference.png`,
         meta: `screens/${slug}/meta.json`,
+        spec: `screens/${slug}/spec.json`,
+        copy: `screens/${slug}/copy.json`,
       },
       frame: {
         width: Math.round(screen.bounds.width),

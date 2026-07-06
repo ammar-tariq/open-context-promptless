@@ -63,7 +63,10 @@ ${formatNavigationSection(navigationLinks, semantic.exportTarget)}
 - \`AGENTS.md\` — Global rules for layout, typography, and QA.
 - \`phases/\` — Step-by-step implementation phases (design system → screens → navigation → QA).
 - \`catalog/screens.json\` — Canonical screen index with paths to per-screen files.
-- \`catalog/variants.json\` — Duplicate screen names and which variants were skipped (when applicable).
+- \`catalog/variants.json\` — Skipped duplicate variants (when using canonical export mode).
+- \`catalog/variant-groups.json\` — Name groups when multiple slugs share a Figma screen name.
+- \`screens/{slug}/spec.json\` — Screen kind, layout pattern, variant info, implementation checklist.
+- \`screens/{slug}/copy.json\` — Verbatim strings (labels, placeholders, actions) the agent must render.
 - \`screens/{slug}/map.json\` — Design reference map (read while implementing — not a runtime layout format).
 - \`screens/{slug}/reference.png\` — Full-frame reference image for visual QA.
 - \`screens/{slug}/meta.json\` — Screen metadata (frame size, content area, route).
@@ -84,10 +87,10 @@ ${formatPlatformSection(semantic)}
 3. Select the matching export target in OpenContext when exporting (**React Native** for Expo/RN-specific \`AGENTS.md\` and prompts).
 4. Open \`PROMPT.md\`, copy the kickoff prompt, and paste it into Cursor, Claude Code, or your AI agent.
 5. The agent should read \`BUILD.md\` and \`AGENTS.md\`, then run all phases without per-screen prompts.
-6. Use \`screens/{slug}/map.json\` and \`reference.png\` as **design reference** while implementing each screen.
+6. For each screen: read \`screens/{slug}/spec.json\` and \`copy.json\`, then match \`reference.png\`.
 7. Compare implemented screens to \`screens/{slug}/reference.png\` during QA (phase 05).
 8. Reference files in \`assets/\` when implementing images and icons in code.
-${semantic.exportTarget === 'react-native' ? '9. Follow `AGENTS.md` for RN folder structure (`src/screens/{slug}/index.tsx`, `styles.ts`, shared `src/components/`). Use `navigation/flows.json` and `navigation-notes.md` for routing.' : '9. For General exports, confirm the target stack in `PROMPT.md` or let the agent ask once before implementing.'}
+${semantic.exportTarget === 'react-native' ? '9. Follow `AGENTS.md` — unique `src/screens/{slug}/` per catalog entry; no `_templates/` batching.' : '9. For General exports, confirm the target stack in `PROMPT.md` or let the agent ask once before implementing.'}
 
 ## Notes
 

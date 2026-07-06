@@ -2,7 +2,16 @@ import type { ParsedDesign } from '@/types';
 import type { SemanticDesign } from '@/types/semantic';
 import type { ScreenCatalogEntry } from '@/types/map';
 import { CONTEXT_FOLDER_NAME } from '@/constants';
-import { DESIGN_REFERENCE_LAYOUT, FORBIDDEN_GENERIC_RENDERER } from './design-reference';
+import {
+  DESIGN_REFERENCE_LAYOUT,
+  FORBIDDEN_GENERIC_RENDERER,
+  FORBIDDEN_TEMPLATE_BATCHING,
+} from './design-reference';
+import {
+  buildScreenSpecDetailSection,
+  buildScreenSpecSummaryLine,
+} from '@/map/screen-spec-builder';
+import type { ScreenSpec } from '@/types/map';
 
 export function generateReactNativeBuildMd(
   semantic: SemanticDesign,
@@ -39,7 +48,8 @@ ${screenList || '_No screens exported._'}
 
 - Read \`AGENTS.md\` before writing code — it defines folder structure and forbidden patterns.
 - Implement **real React Native screens** — not a JSON layout engine.
-- Use \`map.json\` + \`reference.png\` as design reference while coding each screen.
+- Use \`screens/{slug}/spec.json\`, \`copy.json\`, and \`reference.png\` while coding each screen.
+- Slugs sharing a name (e.g. \`create-league-2\`) are **different UI states** — check \`screenKind\` in spec.json.
 - Use \`shared/tokens.json\`, \`shared/components.json\`, and \`navigation-notes.md\`.
 
 ---
@@ -55,11 +65,18 @@ Export target: **React Native** (Expo + TypeScript)
 
 ${FORBIDDEN_GENERIC_RENDERER}
 
+${FORBIDDEN_TEMPLATE_BATCHING}
+
+## Copy fidelity
+
+- Render every string in \`screens/{slug}/copy.json\` **verbatim** (labels, placeholders, button text).
+- Start each screen by reading \`screens/{slug}/spec.json\` → \`implementationChecklist\`.
+
 ## Implementation model
 
 Build **typed, idiomatic React Native UI** — one proper screen module per catalog entry.
 
-- Read \`screens/{slug}/map.json\` and \`reference.png\` **while implementing** that screen.
+- Read \`screens/{slug}/spec.json\`, \`copy.json\`, \`map.json\`, and \`reference.png\` while implementing each slug.
 - Compose screens from **shared components** (\`src/components/\`) and **screen-local components**.
 - Translate design intent into \`View\`, \`Text\`, \`Pressable\`, \`Image\`, \`StyleSheet\` — not raw percentage boxes for every node.
 
@@ -150,13 +167,22 @@ export function generateReactNativePhaseFiles(
   semantic: SemanticDesign,
   design: ParsedDesign,
   catalog: ScreenCatalogEntry[],
+  specs: ScreenSpec[] = [],
 ): Record<string, string> {
-  const screenBullets = catalog
-    .map(
-      (entry) =>
-        `- [ ] **${entry.name}** (\`${entry.slug}\`) → \`src/screens/${entry.slug}/\` — ref: \`screens/${entry.slug}/reference.png\``,
-    )
-    .join('\n');
+  const screenBullets =
+    specs.length > 0
+      ? specs.map((spec) => buildScreenSpecSummaryLine(spec)).join('\n')
+      : catalog
+          .map(
+            (entry) =>
+              `- [ ] **${entry.name}** (\`${entry.slug}\`) → \`src/screens/${entry.slug}/\` — ref: \`screens/${entry.slug}/reference.png\``,
+          )
+          .join('\n');
+
+  const detailSections =
+    specs.length > 0
+      ? specs.map((spec) => buildScreenSpecDetailSection(spec)).join('\n')
+      : '_See catalog/screens.json_';
 
   return {
     'phases/00-overview.md': `# Phase 00 — Overview (React Native)
@@ -208,27 +234,31 @@ Shared components are **required** — phase 03 depends on them.
 `,
     'phases/03-screens.md': `# Phase 03 — Screens (React Native)
 
-Implement **all** screens as typed React Native modules. Do not use a JSON layout engine.
+Implement **all** screens as typed React Native modules — one unique folder per slug.
 
-## Checklist
+## Summary checklist
 
 ${screenBullets || '_No screens._'}
 
+## Per-screen requirements
+
+${detailSections}
+
 ## Per screen (\`src/screens/{slug}/\`)
 
-1. Create \`index.tsx\` — compose shared + local components to match \`reference.png\`
-2. Create \`styles.ts\` — all styles via \`StyleSheet.create\` (camelCase keys)
-3. Add \`components/\` only for sections unique to this screen
-4. Read \`context/screens/{slug}/map.json\` for spacing, colors, and asset paths **while coding**
-5. Copy assets from \`context/assets/\` into the project
-6. Create thin route file \`src/app/{slug}.tsx\` that re-exports the screen
-7. Compare result to \`context/screens/{slug}/reference.png\` before marking done
+1. Read \`context/screens/{slug}/spec.json\` and \`copy.json\` first
+2. Open \`context/screens/{slug}/reference.png\` before writing layout code
+3. Create \`index.tsx\` + \`styles.ts\` — **unique to this slug**
+4. Use \`copy.json\` labels and button text verbatim
+5. Create thin route \`src/app/{slug}.tsx\` re-exporting the screen
+6. Compare result to \`reference.png\` before marking done
 
 ## Forbidden
 
-- One-line \`<MapScreen map={...} />\` wrappers
-- Codegen scripts that generate identical stub files for every screen
-- Absolute-positioning every node from the map instead of composing components
+- \`src/screens/_templates/\` shared across slugs
+- \`screenDefinitions.json\` + \`generate-screens.mjs\` batch stubs
+- One-line \`<MapScreen map={...} />\` or \`<FormScreenView step={n} />\` wrappers
+- Treating \`create-league-2\` as "step 2" of \`create-league\` (check \`screenKind\` in spec.json)
 `,
     'phases/04-navigation.md': `# Phase 04 — Navigation (React Native)
 

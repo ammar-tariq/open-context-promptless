@@ -122,6 +122,9 @@ export async function generateContextPackage(
       projectName: normalizedName,
       exportTarget: normalizedTarget,
       screenCount: screenPackageResult.exportedScreenCount,
+      uniqueScreenNames: screenPackageResult.uniqueScreenNameCount,
+      variantMode: exportOptions.variantMode,
+      skippedVariantCount: screenPackageResult.skippedVariantCount,
     });
 
     return {

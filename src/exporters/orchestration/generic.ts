@@ -1,8 +1,17 @@
 import type { ParsedDesign } from '@/types';
 import type { SemanticDesign } from '@/types/semantic';
-import type { ScreenCatalogEntry } from '@/types/map';
+import type { ScreenCatalogEntry, ScreenSpec } from '@/types/map';
 import { CONTEXT_FOLDER_NAME } from '@/constants';
-import { ASSETS_AND_QA, DESIGN_REFERENCE_LAYOUT, FORBIDDEN_GENERIC_RENDERER } from './design-reference';
+import {
+  ASSETS_AND_QA,
+  DESIGN_REFERENCE_LAYOUT,
+  FORBIDDEN_GENERIC_RENDERER,
+  FORBIDDEN_TEMPLATE_BATCHING,
+} from './design-reference';
+import {
+  buildScreenSpecDetailSection,
+  buildScreenSpecSummaryLine,
+} from '@/map/screen-spec-builder';
 
 export function generateGenericBuildMd(
   semantic: SemanticDesign,
@@ -38,7 +47,7 @@ ${screenList || '_No screens exported._'}
 ## Rules
 
 - Read \`AGENTS.md\` before writing code.
-- Use \`map.json\` + \`reference.png\` as **design reference** — not a runtime layout format.
+- Use \`screens/{slug}/spec.json\`, \`copy.json\`, \`map.json\`, and \`reference.png\` as **design reference**.
 - Apply **idiomatic patterns** for the stack you confirm with the user.
 - Use \`shared/tokens.json\` and \`shared/components.json\`.
 
@@ -54,6 +63,13 @@ export function generateGenericAgentsMd(semantic: SemanticDesign): string {
 Export target: **General** (stack-agnostic design context)
 
 ${FORBIDDEN_GENERIC_RENDERER}
+
+${FORBIDDEN_TEMPLATE_BATCHING}
+
+## Copy fidelity
+
+- Use \`screens/{slug}/copy.json\` for verbatim labels and button text.
+- Read \`screens/{slug}/spec.json\` before implementing each slug.
 
 ## Stack confirmation (required)
 
@@ -71,7 +87,7 @@ If the user filled in \`Target stack:\` in \`PROMPT.md\`, treat that as confirme
 
 ## Implementation model
 
-- Read \`screens/{slug}/map.json\` and \`reference.png\` **while implementing** each screen.
+- Read \`screens/{slug}/spec.json\`, \`copy.json\`, \`map.json\`, and \`reference.png\` **while implementing** each screen.
 - Write **proper UI code** for the confirmed stack — components, styles, and composition.
 - Do **not** ship a framework-agnostic JSON layout engine.
 
@@ -100,13 +116,22 @@ export function generateGenericPhaseFiles(
   semantic: SemanticDesign,
   design: ParsedDesign,
   catalog: ScreenCatalogEntry[],
+  specs: ScreenSpec[] = [],
 ): Record<string, string> {
-  const screenBullets = catalog
-    .map(
-      (entry) =>
-        `- [ ] **${entry.name}** (\`${entry.slug}\`) — ref: \`screens/${entry.slug}/map.json\` + \`reference.png\``,
-    )
-    .join('\n');
+  const screenBullets =
+    specs.length > 0
+      ? specs.map((spec) => buildScreenSpecSummaryLine(spec)).join('\n')
+      : catalog
+          .map(
+            (entry) =>
+              `- [ ] **${entry.name}** (\`${entry.slug}\`) — ref: \`screens/${entry.slug}/spec.json\` + \`reference.png\``,
+          )
+          .join('\n');
+
+  const detailSections =
+    specs.length > 0
+      ? specs.map((spec) => buildScreenSpecDetailSection(spec)).join('\n')
+      : '_See catalog/screens.json_';
 
   return {
     'phases/00-overview.md': `# Phase 00 — Overview (General)
@@ -157,23 +182,29 @@ Build reusable components referenced across screens.
 `,
     'phases/03-screens.md': `# Phase 03 — Screens (General)
 
-Implement **all** screens in the confirmed stack. Do not use a JSON layout engine.
+Implement **all** screens in the confirmed stack — one unique implementation per slug.
 
-## Checklist
+## Summary checklist
 
 ${screenBullets || '_No screens._'}
 
+## Per-screen requirements
+
+${detailSections}
+
 ## Per screen
 
-1. Open \`screens/{slug}/map.json\` and \`reference.png\` as design reference
-2. Implement idiomatic UI for the confirmed stack (components + styles — not raw map replay)
-3. Load assets from \`assets/\`
-4. Match \`reference.png\` before marking complete
+1. Read \`screens/{slug}/spec.json\` and \`copy.json\` first
+2. Open \`screens/{slug}/reference.png\` before coding
+3. Implement idiomatic UI — not a shared template across slugs
+4. Use \`copy.json\` strings verbatim
+5. Match \`reference.png\` before marking complete
 
 ## Forbidden
 
 - Generic \`map.json\` runtime renderers
-- Codegen scripts that output identical stub files for every screen
+- \`_templates/\`, \`screenDefinitions.json\`, \`generate-screens.mjs\` batch stubs
+- Treating slug suffixes (\`-2\`, \`-3\`) as sequential wizard steps
 `,
     'phases/04-navigation.md': `# Phase 04 — Navigation
 

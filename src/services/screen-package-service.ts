@@ -1,7 +1,8 @@
 import type { ContextPackageFile, ParsedDesign } from '@/types';
 import type { SemanticDesign } from '@/types/semantic';
-import type { ExportOptions, ScreenCatalogEntry } from '@/types/map';
+import type { ExportOptions, ScreenCatalogEntry, ScreenSpec } from '@/types/map';
 import { buildScreenMap } from '@/map/map-builder';
+import { buildScreenSpec, buildVariantGroups } from '@/map/screen-spec-builder';
 import {
   buildCatalogEntries,
   buildVariantsJson,
@@ -27,8 +28,10 @@ export interface ScreenPackageInput {
 export interface ScreenPackageResult {
   files: ContextPackageFile[];
   catalog: ScreenCatalogEntry[];
+  specs: ScreenSpec[];
   skippedVariantCount: number;
   exportedScreenCount: number;
+  uniqueScreenNameCount: number;
 }
 
 /**
@@ -51,6 +54,14 @@ export async function buildScreenPackage(input: ScreenPackageInput): Promise<Scr
   const contentArea = detectGlobalContentArea(screenNodes);
   const files: ContextPackageFile[] = [];
   const semanticById = new Map(semantic.screens.map((screen) => [screen.id, screen]));
+  const specs: ScreenSpec[] = [];
+
+  const variantGroups = buildVariantGroups(
+    selectedScreens.map((screen) => ({
+      name: screen.name,
+      slug: slugByScreenId.get(screen.id) ?? screen.id,
+    })),
+  );
 
   const total = selectedScreens.length;
 
@@ -72,9 +83,27 @@ export async function buildScreenPackage(input: ScreenPackageInput): Promise<Scr
       figmaNode,
     });
 
+    const { spec, copy } = buildScreenSpec({
+      map,
+      slug,
+      variantGroups,
+    });
+
+    specs.push(spec);
+
     files.push({
       path: `screens/${slug}/map.json`,
       content: JSON.stringify(map, null, 2),
+    });
+
+    files.push({
+      path: `screens/${slug}/spec.json`,
+      content: JSON.stringify(spec, null, 2),
+    });
+
+    files.push({
+      path: `screens/${slug}/copy.json`,
+      content: JSON.stringify(copy, null, 2),
     });
 
     files.push({
@@ -88,6 +117,16 @@ export async function buildScreenPackage(input: ScreenPackageInput): Promise<Scr
           frame: map.screen.frame,
           contentArea: map.screen.contentArea,
           reference: map.reference,
+          screenKind: spec.screenKind,
+          layoutPattern: spec.layoutPattern,
+          variantOf: spec.variantOf,
+          variantNote: spec.variantNote,
+          paths: {
+            map: `screens/${slug}/map.json`,
+            spec: `screens/${slug}/spec.json`,
+            copy: `screens/${slug}/copy.json`,
+            reference: `screens/${slug}/reference.png`,
+          },
         },
         null,
         2,
@@ -105,7 +144,8 @@ export async function buildScreenPackage(input: ScreenPackageInput): Promise<Scr
     }
   }
 
-  const catalog = buildCatalogEntries(selectedScreens, slugByScreenId);
+  const specsBySlug = new Map(specs.map((spec) => [spec.slug, spec]));
+  const catalog = buildCatalogEntries(selectedScreens, slugByScreenId, specsBySlug);
 
   files.push({
     path: 'catalog/screens.json',
@@ -118,6 +158,11 @@ export async function buildScreenPackage(input: ScreenPackageInput): Promise<Scr
       content: JSON.stringify(buildVariantsJson(variants), null, 2),
     });
   }
+
+  files.push({
+    path: 'catalog/variant-groups.json',
+    content: JSON.stringify({ groups: variantGroups }, null, 2),
+  });
 
   files.push({
     path: 'shared/tokens.json',
@@ -157,10 +202,13 @@ export async function buildScreenPackage(input: ScreenPackageInput): Promise<Scr
       projectName: semantic.project.name,
       exportTarget: semantic.exportTarget as ExportTargetId,
       screenCount: catalog.length,
+      uniqueScreenNames: variantGroups.length,
+      variantMode: options.variantMode,
+      skippedVariantCount: skippedVariantCount,
     }),
   });
 
-  const phases = generatePhaseFiles(semantic, design, catalog);
+  const phases = generatePhaseFiles(semantic, design, catalog, specs);
   for (const [path, content] of Object.entries(phases)) {
     files.push({ path, content });
   }
@@ -168,7 +216,9 @@ export async function buildScreenPackage(input: ScreenPackageInput): Promise<Scr
   return {
     files,
     catalog,
+    specs,
     skippedVariantCount,
     exportedScreenCount: selectedScreens.length,
+    uniqueScreenNameCount: variantGroups.length,
   };
 }
