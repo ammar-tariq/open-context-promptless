@@ -23,7 +23,7 @@ export const EXPORT_TARGETS: ExportTargetDefinition[] = [
   },
   {
     id: 'react-native',
-    label: 'React Native',
+    label: 'React Native (unstable)',
     description: 'Screen routes and React Navigation implementation notes.',
     status: 'supported',
   },

@@ -1,58 +1,118 @@
 import { PLUGIN_NAME, PLUGIN_VERSION, SELECTABLE_EXPORT_TARGETS } from '@/constants';
-import { usePluginStore } from '@/ui/store/plugin-store';
+import { usePluginStore, useSelectedScreenCount } from '@/ui/store/plugin-store';
 import {
   usePluginMessaging,
   postPluginMessage,
-  requestSelectionRefresh,
+  requestScreenListRefresh,
 } from '@/hooks/usePluginMessaging';
 import { createMessage } from '@/types/messages';
 import './styles.css';
 
-function SelectionInfo() {
-  const selectionCount = usePluginStore((state) => state.selectionCount);
-  const exportableCount = usePluginStore((state) => state.exportableCount);
-  const selectedItems = usePluginStore((state) => state.selectedItems);
+function formatScreenType(type: string): string {
+  switch (type) {
+    case 'FRAME':
+      return 'Frame';
+    case 'SECTION':
+      return 'Section';
+    case 'COMPONENT':
+      return 'Component';
+    case 'INSTANCE':
+      return 'Instance';
+    default:
+      return type;
+  }
+}
 
-  if (selectionCount === 0) {
+function ScreenPicker() {
+  const pageName = usePluginStore((state) => state.pageName);
+  const screens = usePluginStore((state) => state.screens);
+  const checkedScreenIds = usePluginStore((state) => state.checkedScreenIds);
+  const status = usePluginStore((state) => state.status);
+  const toggleScreen = usePluginStore((state) => state.toggleScreen);
+  const selectAllScreens = usePluginStore((state) => state.selectAllScreens);
+  const clearScreenSelection = usePluginStore((state) => state.clearScreenSelection);
+
+  const isGenerating = status === 'loading';
+  const checkedSet = new Set(checkedScreenIds);
+  const exportableScreens = screens.filter((screen) => !screen.empty);
+  const allExportableSelected =
+    exportableScreens.length > 0 &&
+    exportableScreens.every((screen) => checkedSet.has(screen.id));
+  const selectedCount = exportableScreens.filter((screen) => checkedSet.has(screen.id)).length;
+
+  if (screens.length === 0) {
     return (
       <div className="info-banner info-banner--warning">
-        <p className="info-banner__title">No selection detected</p>
+        <p className="info-banner__title">No screens on this page</p>
         <p className="info-banner__text">
-          Click a top-level frame, section, component, or instance on the canvas while this
-          plugin is open. Selecting layers inside a frame is not enough — select the frame
-          itself.
+          Add top-level frames, sections, components, or instances to{' '}
+          <strong>{pageName || 'this page'}</strong>, then refresh the list.
         </p>
       </div>
     );
   }
-
-  if (exportableCount === 0) {
-    const unsupported = selectedItems
-      .filter((item) => !item.exportable)
-      .map((item) => `${item.name} (${item.type})`)
-      .join(', ');
-
-    return (
-      <div className="info-banner info-banner--warning">
-        <p className="info-banner__title">Unsupported selection</p>
-        <p className="info-banner__text">
-          Selected: {unsupported}. Choose frames, sections, components, or instances instead.
-        </p>
-      </div>
-    );
-  }
-
-  const exportableNames = selectedItems
-    .filter((item) => item.exportable)
-    .map((item) => item.name);
 
   return (
-    <div className="info-banner info-banner--neutral">
-      <p className="info-banner__title">
-        {exportableCount} exportable screen{exportableCount === 1 ? '' : 's'} selected
-      </p>
-      <p className="info-banner__text">{exportableNames.join(', ')}</p>
-    </div>
+    <section className="screen-picker" aria-labelledby="screen-picker-title">
+      <div className="screen-picker__header">
+        <div>
+          <h2 id="screen-picker-title" className="screen-picker__title">
+            Screens
+          </h2>
+          <p className="screen-picker__subtitle">
+            {pageName || 'Current page'} · {selectedCount} of {exportableScreens.length} selected
+          </p>
+        </div>
+        <div className="screen-picker__actions">
+          <button
+            type="button"
+            className="button button--ghost button--compact"
+            disabled={isGenerating || exportableScreens.length === 0 || allExportableSelected}
+            onClick={selectAllScreens}
+          >
+            Select all
+          </button>
+          <button
+            type="button"
+            className="button button--ghost button--compact"
+            disabled={isGenerating || selectedCount === 0}
+            onClick={clearScreenSelection}
+          >
+            Clear
+          </button>
+        </div>
+      </div>
+
+      <ul className="screen-picker__list" role="listbox" aria-multiselectable="true">
+        {screens.map((screen) => {
+          const isChecked = checkedSet.has(screen.id);
+          const isDisabled = isGenerating || screen.empty;
+
+          return (
+            <li key={screen.id} className="screen-picker__item">
+              <label
+                className={`screen-picker__label${screen.empty ? ' screen-picker__label--disabled' : ''}`}
+              >
+                <input
+                  type="checkbox"
+                  className="screen-picker__checkbox"
+                  checked={isChecked}
+                  disabled={isDisabled}
+                  onChange={() => toggleScreen(screen.id)}
+                />
+                <span className="screen-picker__meta">
+                  <span className="screen-picker__name">{screen.name}</span>
+                  <span className="screen-picker__type">
+                    {formatScreenType(screen.type)}
+                    {screen.empty ? ' · empty' : ''}
+                  </span>
+                </span>
+              </label>
+            </li>
+          );
+        })}
+      </ul>
+    </section>
   );
 }
 
@@ -127,15 +187,16 @@ export function App() {
 
   const projectName = usePluginStore((state) => state.projectName);
   const exportTarget = usePluginStore((state) => state.exportTarget);
-  const exportableCount = usePluginStore((state) => state.exportableCount);
+  const checkedScreenIds = usePluginStore((state) => state.checkedScreenIds);
   const status = usePluginStore((state) => state.status);
   const setProjectName = usePluginStore((state) => state.setProjectName);
   const setExportTarget = usePluginStore((state) => state.setExportTarget);
   const setLoading = usePluginStore((state) => state.setLoading);
+  const selectedScreenCount = useSelectedScreenCount();
 
   const isGenerating = status === 'loading';
   const canGenerate =
-    exportableCount > 0 && projectName.trim().length > 0 && !isGenerating;
+    selectedScreenCount > 0 && projectName.trim().length > 0 && !isGenerating;
 
   const handleGenerate = () => {
     setLoading();
@@ -143,6 +204,7 @@ export function App() {
       createMessage('GENERATE_CONTEXT', {
         projectName: projectName.trim(),
         exportTarget,
+        selectedScreenIds: checkedScreenIds,
       }),
     );
   };
@@ -158,15 +220,15 @@ export function App() {
       </header>
 
       <main className="main">
-        <SelectionInfo />
+        <ScreenPicker />
 
         <button
           type="button"
-          className="button button--ghost selection-refresh"
+          className="button button--ghost screen-refresh"
           disabled={isGenerating}
-          onClick={requestSelectionRefresh}
+          onClick={requestScreenListRefresh}
         >
-          Refresh selection
+          Refresh screen list
         </button>
 
         <label className="field">

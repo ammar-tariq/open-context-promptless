@@ -6,7 +6,7 @@ This project exports **design context**, not application code.
 
 ## Features
 
-- Select one or more top-level frames, sections, components, or instances
+- Select screens from a checkbox list of all top-level frames, sections, components, and instances on the current page
 - Choose an export target: **General** (default) or **React Native** (with React Navigation notes)
 - Parse Figma nodes into a normalized, semantic data model
 - Export prototype screen-to-screen links from Figma interactions
@@ -87,9 +87,8 @@ pnpm format
 1. Run `pnpm build`
 2. In Figma: **Plugins → Development → Import plugin from manifest…**
 3. Select `manifest.json` from this repository
-4. Select frames in your file
-5. Run **OpenContext**
-6. Enter a project name and click **Generate Context**
+4. Open the plugin and check the screens you want to export
+5. Enter a project name and click **Generate Context**
 
 The plugin downloads a `context.zip` archive containing the exported package.
 

@@ -5,7 +5,8 @@ import type { GenerateErrorPayload, PluginMessage } from '@/types/messages';
 import {
   deriveDefaultProjectName,
   generateContextPackage,
-  getSelectionSummary,
+  getDefaultCheckedScreenIds,
+  listPageScreens,
   SelectionError,
   ExportError,
 } from '@/services';
@@ -51,21 +52,18 @@ function toGenerateErrorPayload(error: unknown): GenerateErrorPayload {
 }
 
 function sendInitState(): void {
-  const selection = getSelectionSummary();
+  const { pageName, screens } = listPageScreens();
+  const defaultCheckedScreenIds = getDefaultCheckedScreenIds(screens);
+
   postToUi(
     createMessage('INIT_RESPONSE', {
-      selectionCount: selection.count,
-      exportableCount: selection.exportableCount,
-      selectionNames: selection.names,
-      selectedItems: selection.items,
-      defaultProjectName: deriveDefaultProjectName(),
+      pageName,
+      screens,
+      defaultProjectName: deriveDefaultProjectName(defaultCheckedScreenIds.length),
+      defaultCheckedScreenIds,
     }),
   );
 }
-
-figma.on('selectionchange', () => {
-  sendInitState();
-});
 
 figma.on('currentpagechange', () => {
   sendInitState();
@@ -80,10 +78,15 @@ figma.ui.onmessage = async (message: PluginMessage) => {
 
     case 'GENERATE_CONTEXT': {
       const payload = message.payload as
-        | { projectName?: string; exportTarget?: string }
+        | {
+            projectName?: string;
+            exportTarget?: string;
+            selectedScreenIds?: string[];
+          }
         | undefined;
       const projectName = payload?.projectName;
       const exportTarget = payload?.exportTarget ?? 'generic';
+      const selectedScreenIds = payload?.selectedScreenIds;
       if (!projectName || typeof projectName !== 'string') {
         postExportError(new ExportError('Project name is required.', 'INVALID_PROJECT_NAME'));
         break;
@@ -94,10 +97,16 @@ figma.ui.onmessage = async (message: PluginMessage) => {
         break;
       }
 
+      if (!Array.isArray(selectedScreenIds) || selectedScreenIds.length === 0) {
+        postExportError(new ExportError('Select at least one screen to export.', 'NO_SELECTION'));
+        break;
+      }
+
       try {
         const result = await generateContextPackage(
           projectName,
           exportTarget as ExportTargetId,
+          selectedScreenIds,
           (stage, progress) => {
             postToUi(createMessage('GENERATE_PROGRESS', { stage, progress }));
           },

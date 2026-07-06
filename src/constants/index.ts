@@ -3,7 +3,7 @@ export const PLUGIN_VERSION = '1.0.0';
 export const CONTEXT_FOLDER_NAME = 'context';
 
 export const UI_WIDTH = 360;
-export const UI_HEIGHT = 540;
+export const UI_HEIGHT = 620;
 
 export * from './export-targets';
 

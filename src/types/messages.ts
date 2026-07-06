@@ -10,23 +10,24 @@ export type PluginMessageType =
   | 'GENERATE_ERROR'
   | 'RESIZE_UI';
 
-export interface SelectedNodeSummary {
+export interface ScreenSummary {
+  id: string;
   name: string;
   type: string;
-  exportable: boolean;
+  empty: boolean;
 }
 
 export interface InitResponsePayload {
-  selectionCount: number;
-  exportableCount: number;
-  selectionNames: string[];
-  selectedItems: SelectedNodeSummary[];
+  pageName: string;
+  screens: ScreenSummary[];
   defaultProjectName: string;
+  defaultCheckedScreenIds: string[];
 }
 
 export interface GenerateContextPayload {
   projectName: string;
   exportTarget: ExportTargetId;
+  selectedScreenIds: string[];
 }
 
 export interface GenerateProgressPayload {

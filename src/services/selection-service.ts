@@ -11,17 +11,16 @@ export class SelectionError extends Error {
   }
 }
 
-export interface SelectedNodeSummary {
+export interface ScreenSummary {
+  id: string;
   name: string;
   type: string;
-  exportable: boolean;
+  empty: boolean;
 }
 
-export interface SelectionSummary {
-  count: number;
-  exportableCount: number;
-  names: string[];
-  items: SelectedNodeSummary[];
+export interface PageScreensState {
+  pageName: string;
+  screens: ScreenSummary[];
 }
 
 function isExportableNodeType(type: string): boolean {
@@ -31,62 +30,98 @@ function isExportableNodeType(type: string): boolean {
 }
 
 /**
- * Validates and returns top-level frame selections from the current Figma document.
+ * Lists exportable top-level screens on the current Figma page.
  */
-export function getSelectedExportNodes(): SceneNode[] {
-  const selection = figma.currentPage.selection;
-
-  if (selection.length === 0) {
-    throw new SelectionError(
-      'Select one or more top-level frames, sections, or components to export.',
-      'NO_SELECTION',
-    );
-  }
-
-  const unsupported = selection.filter((node) => !isExportableNodeType(node.type));
-
-  if (unsupported.length > 0) {
-    const names = unsupported.map((node) => `${node.name} (${node.type})`).join(', ');
-    throw new SelectionError(
-      `Unsupported selection: ${names}. Choose frames, sections, components, or instances.`,
-      'UNSUPPORTED_NODES',
-    );
-  }
-
-  const emptyNodes = selection.filter((node) => !hasVisibleContent(node));
-  if (emptyNodes.length === selection.length) {
-    throw new SelectionError(
-      'Selected frames appear to be empty. Add visible content before exporting.',
-      'EMPTY_FRAMES',
-    );
-  }
-
-  return [...selection];
-}
-
-export function getSelectionSummary(): SelectionSummary {
-  const selection = figma.currentPage.selection;
-  const items = selection.map((node) => ({
-    name: node.name,
-    type: node.type,
-    exportable: isExportableNodeType(node.type),
-  }));
+export function listPageScreens(): PageScreensState {
+  const screens = figma.currentPage.children
+    .filter((node) => isExportableNodeType(node.type))
+    .map((node) => ({
+      id: node.id,
+      name: node.name,
+      type: node.type,
+      empty: !hasVisibleContent(node),
+    }))
+    .sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }));
 
   return {
-    count: selection.length,
-    exportableCount: items.filter((item) => item.exportable).length,
-    names: selection.map((node) => node.name),
-    items,
+    pageName: figma.currentPage.name,
+    screens,
   };
 }
 
-export function deriveDefaultProjectName(): string {
-  const selection = figma.currentPage.selection;
-  if (selection.length === 1) {
-    return selection[0]?.name ?? figma.currentPage.name;
+/**
+ * Resolves checked screen IDs into SceneNodes for export.
+ */
+export async function getExportNodesByIds(screenIds: string[]): Promise<SceneNode[]> {
+  if (screenIds.length === 0) {
+    throw new SelectionError('Select at least one screen to export.', 'NO_SELECTION');
   }
-  if (selection.length > 1) {
+
+  const nodes: SceneNode[] = [];
+  const missing: string[] = [];
+  const empty: string[] = [];
+  const unsupported: string[] = [];
+
+  for (const screenId of screenIds) {
+    const node = await figma.getNodeByIdAsync(screenId);
+
+    if (!node || node.type === 'PAGE' || node.type === 'DOCUMENT') {
+      missing.push(screenId);
+      continue;
+    }
+
+    const sceneNode = node as SceneNode;
+
+    if (!isExportableNodeType(sceneNode.type)) {
+      unsupported.push(`${sceneNode.name} (${sceneNode.type})`);
+      continue;
+    }
+
+    if (!hasVisibleContent(sceneNode)) {
+      empty.push(sceneNode.name);
+      continue;
+    }
+
+    nodes.push(sceneNode);
+  }
+
+  if (nodes.length === 0) {
+    if (empty.length > 0) {
+      throw new SelectionError(
+        `Selected screens appear to be empty: ${empty.join(', ')}.`,
+        'EMPTY_FRAMES',
+      );
+    }
+
+    if (unsupported.length > 0) {
+      throw new SelectionError(
+        `Unsupported screens: ${unsupported.join(', ')}.`,
+        'UNSUPPORTED_NODES',
+      );
+    }
+
+    throw new SelectionError(
+      'Selected screens could not be found. Refresh the screen list and try again.',
+      'SCREENS_NOT_FOUND',
+    );
+  }
+
+  return nodes;
+}
+
+export function deriveDefaultProjectName(screenCount = 0): string {
+  if (screenCount === 1) {
+    const screens = listPageScreens().screens.filter((screen) => !screen.empty);
+    return screens[0]?.name ?? figma.currentPage.name;
+  }
+
+  if (screenCount > 1) {
     return figma.currentPage.name;
   }
-  return figma.root.name;
+
+  return figma.currentPage.name || figma.root.name;
+}
+
+export function getDefaultCheckedScreenIds(screens: ScreenSummary[]): string[] {
+  return screens.filter((screen) => !screen.empty).map((screen) => screen.id);
 }

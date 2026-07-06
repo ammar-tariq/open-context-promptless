@@ -2,17 +2,16 @@ import { create } from 'zustand';
 import type { ExportTargetId } from '@/constants/export-targets';
 import { DEFAULT_EXPORT_TARGET } from '@/constants/export-targets';
 import type { ExportSummary } from '@/types';
-import type { GenerateErrorPayload, SelectedNodeSummary } from '@/types/messages';
+import type { GenerateErrorPayload, ScreenSummary } from '@/types/messages';
 
 export type UiStatus = 'idle' | 'loading' | 'success' | 'error';
 
 interface PluginState {
   projectName: string;
   exportTarget: ExportTargetId;
-  selectionCount: number;
-  exportableCount: number;
-  selectionNames: string[];
-  selectedItems: SelectedNodeSummary[];
+  pageName: string;
+  screens: ScreenSummary[];
+  checkedScreenIds: string[];
   status: UiStatus;
   progress: number;
   progressStage: string;
@@ -20,13 +19,15 @@ interface PluginState {
   error: GenerateErrorPayload | null;
   setProjectName: (name: string) => void;
   setExportTarget: (exportTarget: ExportTargetId) => void;
-  setInitState: (payload: {
-    selectionCount: number;
-    exportableCount: number;
-    selectionNames: string[];
-    selectedItems: SelectedNodeSummary[];
+  setScreensState: (payload: {
+    pageName: string;
+    screens: ScreenSummary[];
     defaultProjectName: string;
+    defaultCheckedScreenIds: string[];
   }) => void;
+  toggleScreen: (screenId: string) => void;
+  selectAllScreens: () => void;
+  clearScreenSelection: () => void;
   setLoading: () => void;
   setProgress: (stage: string, progress: number) => void;
   setSuccess: (summary: ExportSummary) => void;
@@ -34,13 +35,20 @@ interface PluginState {
   resetStatus: () => void;
 }
 
+function countCheckedExportableScreens(
+  screens: ScreenSummary[],
+  checkedScreenIds: string[],
+): number {
+  const checked = new Set(checkedScreenIds);
+  return screens.filter((screen) => checked.has(screen.id) && !screen.empty).length;
+}
+
 export const usePluginStore = create<PluginState>((set) => ({
   projectName: '',
   exportTarget: DEFAULT_EXPORT_TARGET,
-  selectionCount: 0,
-  exportableCount: 0,
-  selectionNames: [],
-  selectedItems: [],
+  pageName: '',
+  screens: [],
+  checkedScreenIds: [],
   status: 'idle',
   progress: 0,
   progressStage: '',
@@ -48,20 +56,47 @@ export const usePluginStore = create<PluginState>((set) => ({
   error: null,
   setProjectName: (projectName) => set({ projectName }),
   setExportTarget: (exportTarget) => set({ exportTarget }),
-  setInitState: ({
-    selectionCount,
-    exportableCount,
-    selectionNames,
-    selectedItems,
+  setScreensState: ({
+    pageName,
+    screens,
     defaultProjectName,
+    defaultCheckedScreenIds,
   }) =>
+    set((state) => {
+      const preservedChecked = state.checkedScreenIds.filter((id) =>
+        screens.some((screen) => screen.id === id && !screen.empty),
+      );
+      const checkedScreenIds =
+        preservedChecked.length > 0 ? preservedChecked : defaultCheckedScreenIds;
+
+      return {
+        pageName,
+        screens,
+        checkedScreenIds,
+        projectName: state.projectName || defaultProjectName,
+      };
+    }),
+  toggleScreen: (screenId) =>
+    set((state) => {
+      const screen = state.screens.find((entry) => entry.id === screenId);
+      if (!screen || screen.empty) {
+        return state;
+      }
+
+      const checked = new Set(state.checkedScreenIds);
+      if (checked.has(screenId)) {
+        checked.delete(screenId);
+      } else {
+        checked.add(screenId);
+      }
+
+      return { checkedScreenIds: Array.from(checked) };
+    }),
+  selectAllScreens: () =>
     set((state) => ({
-      selectionCount,
-      exportableCount,
-      selectionNames,
-      selectedItems,
-      projectName: state.projectName || defaultProjectName,
+      checkedScreenIds: state.screens.filter((screen) => !screen.empty).map((screen) => screen.id),
     })),
+  clearScreenSelection: () => set({ checkedScreenIds: [] }),
   setLoading: () =>
     set({
       status: 'loading',
@@ -93,3 +128,9 @@ export const usePluginStore = create<PluginState>((set) => ({
       error: null,
     }),
 }));
+
+export function useSelectedScreenCount(): number {
+  const screens = usePluginStore((state) => state.screens);
+  const checkedScreenIds = usePluginStore((state) => state.checkedScreenIds);
+  return countCheckedExportableScreens(screens, checkedScreenIds);
+}

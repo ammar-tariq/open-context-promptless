@@ -14,11 +14,10 @@ function isInitResponsePayload(payload: unknown): payload is InitResponsePayload
   return (
     typeof payload === 'object' &&
     payload !== null &&
-    'selectionCount' in payload &&
-    'exportableCount' in payload &&
-    'selectionNames' in payload &&
-    'selectedItems' in payload &&
-    'defaultProjectName' in payload
+    'pageName' in payload &&
+    'screens' in payload &&
+    'defaultProjectName' in payload &&
+    'defaultCheckedScreenIds' in payload
   );
 }
 
@@ -36,7 +35,7 @@ function isGenerateErrorPayload(payload: unknown): payload is GenerateErrorPaylo
  * Bridges Figma plugin messages with the React UI store.
  */
 export function usePluginMessaging(): void {
-  const { setInitState, setProgress, setSuccess, setError } = usePluginStore();
+  const { setScreensState, setProgress, setSuccess, setError } = usePluginStore();
 
   useEffect(() => {
     const handleMessage = async (event: MessageEvent<{ pluginMessage: PluginMessage }>) => {
@@ -46,7 +45,7 @@ export function usePluginMessaging(): void {
       switch (message.type) {
         case 'INIT_RESPONSE':
           if (isInitResponsePayload(message.payload)) {
-            setInitState(message.payload);
+            setScreensState(message.payload);
           }
           break;
         case 'GENERATE_PROGRESS':
@@ -77,15 +76,15 @@ export function usePluginMessaging(): void {
     };
 
     window.onmessage = handleMessage;
-    requestSelectionRefresh();
+    requestScreenListRefresh();
 
     return () => {
       window.onmessage = null;
     };
-  }, [setInitState, setProgress, setSuccess, setError]);
+  }, [setScreensState, setProgress, setSuccess, setError]);
 }
 
-export function requestSelectionRefresh(): void {
+export function requestScreenListRefresh(): void {
   postPluginMessage(createMessage('INIT'));
 }
 

@@ -7,7 +7,7 @@ import { validateExportTargetId } from '@/platforms';
 import { ExportLikeError, extractErrorDetails } from '@/utils/error-details';
 import { exportDesignAssets, enrichDesignWithAssetPaths } from './asset-export-service';
 import { createContextZipBase64, getContextZipFileName } from './zip-service';
-import { getSelectedExportNodes, SelectionError } from './selection-service';
+import { getExportNodesByIds, SelectionError } from './selection-service';
 
 export class ExportError extends ExportLikeError {
   constructor(message: string, code: string, details?: string) {
@@ -33,14 +33,15 @@ export interface ExportProgressHandler {
 export async function generateContextPackage(
   projectName: string,
   exportTargetId: ExportTargetId,
+  selectedScreenIds: string[],
   onProgress?: ExportProgressHandler,
 ): Promise<ExportResult> {
   try {
     const normalizedName = validateProjectName(projectName);
     const normalizedTarget = validateExportTargetId(exportTargetId);
-    onProgress?.('Reading selection', 0.05);
+    onProgress?.('Reading screens', 0.05);
 
-    const nodes = getSelectedExportNodes();
+    const nodes = await getExportNodesByIds(selectedScreenIds);
     onProgress?.('Parsing design', 0.15);
 
     const design = await parseDesign(
