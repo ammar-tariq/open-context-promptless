@@ -1,16 +1,17 @@
 import type { ParsedNode, ParsedScreen } from '@/types';
+import type { BlurEffect } from '@/types/fills';
 import type { SemanticNode } from '@/types/semantic';
-import type { ContentArea, MapViewNode, ScreenMap } from '@/types/map';
+import type { BuildMapOptions, ContentArea, MapViewNode, ScreenMap } from '@/types/map';
 import { buildViewPlacement } from '@/utils/placement';
 import { isStatusBarNode } from '@/utils/status-bar';
 import { toRouteName } from '@/utils/route-names';
-
-interface BuildMapOptions {
-  slug: string;
-  contentArea: ContentArea;
-  figmaNode?: SceneNode;
-  zIndexStart?: number;
-}
+import {
+  buildImplementationHint,
+  inferMapNodeRole,
+  inferViewKind,
+  screenHasBottomTabBarLabels,
+  type ViewKindContext,
+} from '@/map/view-kind';
 
 /**
  * Builds a screen-relative percentage layout map from parsed + semantic trees.
@@ -20,9 +21,15 @@ export function buildScreenMap(
   semanticScreen: SemanticNode,
   options: BuildMapOptions,
 ): ScreenMap {
-  const { slug, contentArea } = options;
+  const { slug, contentArea, rasterOnly = false, allSlugs = [] } = options;
   const screenBounds = screen.bounds;
   let zCounter = options.zIndexStart ?? 1;
+
+  const viewKindContext: ViewKindContext = {
+    screenSlug: slug,
+    allSlugs,
+    hasBottomTabBarLabels: screenHasBottomTabBarLabels(screen.root.children),
+  };
 
   const views = buildViewTree(
     screen.root.children,
@@ -30,6 +37,8 @@ export function buildScreenMap(
     screenBounds,
     contentArea,
     options.figmaNode,
+    viewKindContext,
+    rasterOnly,
     () => zCounter++,
   );
 
@@ -57,6 +66,8 @@ function buildViewTree(
   screenBounds: ParsedScreen['bounds'],
   contentArea: ContentArea,
   figmaRoot: SceneNode | undefined,
+  viewKindContext: ViewKindContext,
+  rasterOnly: boolean,
   nextZIndex: () => number,
 ): MapViewNode[] {
   const semanticById = new Map(semanticNodes.map((node) => [node.id, node]));
@@ -65,7 +76,16 @@ function buildViewTree(
   for (const parsed of parsedNodes) {
     const semantic = semanticById.get(parsed.metadata.figmaId);
     const figmaNode = figmaRoot ? findFigmaChild(figmaRoot, parsed.metadata.figmaId) : undefined;
-    const view = buildViewNode(parsed, semantic, screenBounds, contentArea, figmaNode, nextZIndex);
+    const view = buildViewNode(
+      parsed,
+      semantic,
+      screenBounds,
+      contentArea,
+      figmaNode,
+      viewKindContext,
+      rasterOnly,
+      nextZIndex,
+    );
     if (view) {
       views.push(view);
     }
@@ -80,15 +100,27 @@ function buildViewNode(
   screenBounds: ParsedScreen['bounds'],
   contentArea: ContentArea,
   figmaNode: SceneNode | undefined,
+  viewKindContext: ViewKindContext,
+  rasterOnly: boolean,
   nextZIndex: () => number,
 ): MapViewNode | null {
   const visible = parsed.metadata.visible && parsed.metadata.opacity > 0;
   const isStatusBar = figmaNode ? isStatusBarNode(figmaNode, screenBounds, contentArea.top) : false;
 
   if (isStatusBar && visible) {
-    return buildStatusBarView(parsed, semantic, screenBounds, contentArea, figmaNode, nextZIndex);
+    return buildStatusBarView(
+      parsed,
+      semantic,
+      screenBounds,
+      contentArea,
+      figmaNode,
+      rasterOnly,
+      nextZIndex,
+    );
   }
 
+  const viewKind = inferViewKind(parsed, viewKindContext);
+  const role = inferMapNodeRole(viewKind, false);
   const isText = parsed.semanticType === 'Text';
   const includeSize = !isText;
 
@@ -100,8 +132,8 @@ function buildViewNode(
     { includeSize },
   );
 
-  const assetPath = extractAssetPath(semantic);
-  const style = extractStyle(semantic, parsed);
+  const assetPath = extractAssetPath(semantic, parsed, rasterOnly);
+  const style = extractStyle(parsed, semantic);
   const text = isText ? extractText(parsed, semantic, screenBounds, contentArea) : undefined;
 
   const children = buildViewTree(
@@ -110,6 +142,8 @@ function buildViewNode(
     screenBounds,
     contentArea,
     figmaNode && 'children' in figmaNode ? figmaNode : undefined,
+    viewKindContext,
+    rasterOnly,
     nextZIndex,
   );
 
@@ -117,20 +151,24 @@ function buildViewNode(
     return null;
   }
 
+  const implementation = buildImplementationHint(viewKind);
+
   return {
     id: parsed.metadata.figmaId,
     figmaId: parsed.metadata.figmaId,
     type: parsed.semanticType,
     name: parsed.metadata.name,
+    viewKind,
     zIndex: nextZIndex(),
     visible,
-    role: 'content',
+    role,
     sizing: isText ? 'intrinsic' : 'fixed',
     placement,
     placementPixels,
     ...(style ? { style } : {}),
     ...(text ? { text } : {}),
     ...(assetPath ? { asset: assetPath } : {}),
+    ...(implementation ? { implementation } : {}),
     ...(parsed.layout ? { source: { autoLayout: true } } : {}),
     children,
   };
@@ -142,6 +180,7 @@ function buildStatusBarView(
   screenBounds: ParsedScreen['bounds'],
   contentArea: ContentArea,
   figmaNode: SceneNode | undefined,
+  rasterOnly: boolean,
   nextZIndex: () => number,
 ): MapViewNode {
   const { placement, placementPixels } = buildViewPlacement(
@@ -156,30 +195,44 @@ function buildStatusBarView(
     figmaId: parsed.metadata.figmaId,
     type: parsed.semanticType,
     name: parsed.metadata.name,
+    viewKind: 'statusBar',
     zIndex: nextZIndex(),
     visible: true,
     role: 'statusBar',
     sizing: 'fixed',
     placement,
     placementPixels,
+    implementation: buildImplementationHint('statusBar'),
     children: buildViewTree(
       parsed.children,
       semantic?.children ?? [],
       screenBounds,
       contentArea,
       figmaNode && 'children' in figmaNode ? figmaNode : undefined,
+      { screenSlug: '', allSlugs: [], hasBottomTabBarLabels: false },
+      rasterOnly,
       nextZIndex,
     ),
   };
 }
 
-function extractAssetPath(semantic?: SemanticNode): string | undefined {
-  if (!semantic?.assets || semantic.assets.length === 0) {
-    return undefined;
-  }
+function extractAssetPath(
+  semantic: SemanticNode | undefined,
+  parsed: ParsedNode,
+  rasterOnly: boolean,
+): string | undefined {
+  const assets = [...(semantic?.assets ?? []), ...(parsed.assets ?? [])];
 
-  for (const asset of semantic.assets) {
-    const exportPath = asset.exportPath ?? asset.rasterExportPath;
+  for (const asset of assets) {
+    if (rasterOnly) {
+      const raster = asset.rasterExportPath ?? asset.exportPath;
+      if (typeof raster === 'string' && raster.endsWith('.png')) {
+        return raster;
+      }
+      continue;
+    }
+
+    const exportPath = asset.rasterExportPath ?? asset.exportPath;
     if (typeof exportPath === 'string' && exportPath.length > 0) {
       return exportPath;
     }
@@ -189,11 +242,11 @@ function extractAssetPath(semantic?: SemanticNode): string | undefined {
 }
 
 function extractStyle(
-  semantic: SemanticNode | undefined,
   parsed: ParsedNode,
+  semantic: SemanticNode | undefined,
 ): MapViewNode['style'] | undefined {
   const fills = semantic?.colors as { fills?: Array<{ hex?: string }> } | undefined;
-  const fill = fills?.fills?.[0]?.hex;
+  const fill = fills?.fills?.[0]?.hex ?? parsed.fills?.[0]?.hex;
   const radius = parsed.cornerRadius?.uniform
     ? parsed.cornerRadius.topLeft
     : parsed.cornerRadius
@@ -206,15 +259,37 @@ function extractStyle(
       : undefined;
 
   const opacity = parsed.metadata.opacity < 1 ? parsed.metadata.opacity : undefined;
+  const gradient = parsed.gradients?.[0];
+  const blur = extractBlur(parsed);
 
-  if (!fill && radius === undefined && opacity === undefined) {
+  if (!fill && radius === undefined && opacity === undefined && !gradient && !blur) {
     return undefined;
   }
 
   return {
-    ...(fill ? { backgroundColor: fill } : {}),
+    ...(fill && !gradient ? { backgroundColor: fill } : {}),
     ...(radius !== undefined ? { borderRadius: radius } : {}),
     ...(opacity !== undefined ? { opacity } : {}),
+    ...(gradient ? { gradient } : {}),
+    ...(blur ? { blur } : {}),
+  };
+}
+
+function extractBlur(parsed: ParsedNode): BlurEffect | undefined {
+  const blurEffect = parsed.effects?.find(
+    (effect) =>
+      effect.visible !== false &&
+      (effect.type === 'LAYER_BLUR' || effect.type === 'BACKGROUND_BLUR') &&
+      typeof effect.radius === 'number',
+  );
+
+  if (!blurEffect || typeof blurEffect.radius !== 'number') {
+    return undefined;
+  }
+
+  return {
+    type: blurEffect.type as BlurEffect['type'],
+    radius: blurEffect.radius,
   };
 }
 
@@ -277,4 +352,17 @@ export function countParsedNodes(node: ParsedNode): number {
     count += countParsedNodes(child);
   }
   return count;
+}
+
+export function walkMapViews(nodes: MapViewNode[], visit: (node: MapViewNode) => void): void {
+  for (const node of nodes) {
+    visit(node);
+    walkMapViews(node.children, visit);
+  }
+}
+
+export function collectViewKinds(map: ScreenMap): import('@/types/map').ViewKind[] {
+  const kinds = new Set<import('@/types/map').ViewKind>();
+  walkMapViews(map.views, (node) => kinds.add(node.viewKind));
+  return Array.from(kinds);
 }

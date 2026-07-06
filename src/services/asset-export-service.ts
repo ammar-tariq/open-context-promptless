@@ -47,10 +47,17 @@ interface ExportedAssetPaths {
  * Exports cropped raster assets and vector/icon files from the parsed design.
  * Deduplicates shared images (by hash) and repeated component icons.
  */
+export interface AssetExportOptions {
+  /** React Native exports: PNG only under assets/images/ — no SVG */
+  rasterOnly?: boolean;
+}
+
 export async function exportDesignAssets(
   design: ParsedDesign,
   onProgress?: AssetExportProgress,
+  options: AssetExportOptions = {},
 ): Promise<AssetExportResult> {
+  const rasterOnly = options.rasterOnly ?? false;
   const files: ContextPackageFile[] = [];
   const skippedAssets: SkippedAssetExport[] = [];
   const usedFileNames = new Set<string>();
@@ -67,7 +74,10 @@ export async function exportDesignAssets(
   const deduplicatedAssetCount = Math.max(0, candidates.length - groups.length);
 
   const totalSteps = groups.reduce((count, group) => {
-    return count + (group.representative.kind === 'icon' ? 2 : 1);
+    if (group.representative.kind === 'icon') {
+      return count + (rasterOnly ? 1 : 2);
+    }
+    return count + 1;
   }, 0);
 
   let completedSteps = 0;
@@ -90,13 +100,15 @@ export async function exportDesignAssets(
       }
       completedSteps += 1;
     } else {
-      report(`Exporting icon SVG ${completedSteps + 1} of ${totalSteps || 1}`);
-      const svgExport = await exportIconSvg(candidate, usedFileNames, skippedAssets);
-      if (svgExport) {
-        exported.files.push(svgExport.file);
-        exported.vectorPath = svgExport.exportPath;
+      if (!rasterOnly) {
+        report(`Exporting icon SVG ${completedSteps + 1} of ${totalSteps || 1}`);
+        const svgExport = await exportIconSvg(candidate, usedFileNames, skippedAssets);
+        if (svgExport) {
+          exported.files.push(svgExport.file);
+          exported.vectorPath = svgExport.exportPath;
+        }
+        completedSteps += 1;
       }
-      completedSteps += 1;
 
       report(`Exporting icon PNG ${completedSteps + 1} of ${totalSteps || 1}`);
       const rasterExport = await exportCroppedRaster(
@@ -152,11 +164,12 @@ export function enrichDesignWithAssetPaths(
   design: ParsedDesign,
   nodeExportPaths: Map<string, string>,
   nodeRasterExportPaths: Map<string, string>,
+  options: AssetExportOptions = {},
 ): ParsedDesign {
+  const rasterOnly = options.rasterOnly ?? false;
   const enrichAsset = (asset: AssetReference): AssetReference => {
     const vectorPath = nodeExportPaths.get(asset.id);
     const rasterPath = nodeRasterExportPaths.get(asset.id);
-    const isIcon = asset.role === 'icon-vector' || asset.format === 'vector';
 
     if (!vectorPath && !rasterPath) {
       return asset;
@@ -167,11 +180,15 @@ export function enrichDesignWithAssetPaths(
 
     return {
       ...asset,
-      exportPath: vectorPath ?? rasterPath ?? asset.exportPath,
-      rasterExportPath: isIcon ? rasterPath : rasterPath ?? asset.rasterExportPath,
-      mimeType: vectorPath
-        ? 'image/svg+xml'
-        : mimeTypeForImageExtension(rasterExtension === 'jpeg' ? 'jpg' : rasterExtension),
+      exportPath: rasterOnly
+        ? (rasterPath ?? vectorPath ?? asset.exportPath)
+        : (vectorPath ?? rasterPath ?? asset.exportPath),
+      rasterExportPath: rasterPath ?? asset.rasterExportPath,
+      mimeType: rasterOnly
+        ? mimeTypeForImageExtension('png')
+        : vectorPath
+          ? 'image/svg+xml'
+          : mimeTypeForImageExtension(rasterExtension === 'jpeg' ? 'jpg' : rasterExtension),
       rasterMimeType: rasterPath
         ? mimeTypeForImageExtension(rasterExtension === 'jpeg' ? 'jpg' : rasterExtension)
         : asset.rasterMimeType,

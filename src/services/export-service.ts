@@ -10,6 +10,7 @@ import { ExportLikeError, extractErrorDetails } from '@/utils/error-details';
 import { generateStarterPrompt } from '@/utils/starter-prompt';
 import { exportDesignAssets, enrichDesignWithAssetPaths } from './asset-export-service';
 import { getExportNodesByIds, SelectionError } from './selection-service';
+import { buildExportWarnings } from '@/map/export-validation';
 import { buildScreenPackage } from './screen-package-service';
 import { resolveScreenVariants } from './variant-resolution-service';
 
@@ -81,12 +82,14 @@ export async function generateContextPackage(
     const exportDesign = filterDesignScreens(design, selectedIds);
 
     onProgress?.('Exporting assets', 0.85);
-    const assetResult = await exportDesignAssets(exportDesign, onProgress);
+    const rasterOnly = normalizedTarget === 'react-native';
+    const assetResult = await exportDesignAssets(exportDesign, onProgress, { rasterOnly });
 
     const enrichedDesign = enrichDesignWithAssetPaths(
       exportDesign,
       assetResult.nodeExportPaths,
       assetResult.nodeRasterExportPaths,
+      { rasterOnly },
     );
 
     let semantic = translateDesign(enrichedDesign, normalizedTarget);
@@ -102,10 +105,25 @@ export async function generateContextPackage(
       semantic,
       nodes: selectedNodes,
       options: exportOptions,
+      exportTarget: normalizedTarget,
+      skippedAssets: assetResult.skippedAssets,
       onProgress,
     });
 
     contextPackage.files.push(...screenPackageResult.files);
+
+    const warnings = buildExportWarnings({
+      skippedAssets: assetResult.skippedAssets,
+      screenAssets: screenPackageResult.screenAssetsManifests,
+      packageFiles: contextPackage.files,
+    });
+
+    if (warnings.length > 0) {
+      contextPackage.files.push({
+        path: 'export-warnings.json',
+        content: JSON.stringify({ warnings }, null, 2),
+      });
+    }
 
     if (contextPackage.files.length === 0) {
       throw new ExportError('Export produced no files.', 'EXPORT_EMPTY');

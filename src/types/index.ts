@@ -1,5 +1,6 @@
 import type { ParsedNavigation } from './navigation';
 import type { SemanticNodeType } from './semantic';
+import type { GradientFill } from './fills';
 
 export interface Dimensions {
   width: number;
@@ -102,6 +103,8 @@ export interface EffectInfo {
   spread?: number;
 }
 
+export type { GradientFill, GradientStop, BlurEffect } from './fills';
+
 export interface CornerRadiusInfo {
   topLeft: number;
   topRight: number;
@@ -158,6 +161,7 @@ export interface ParsedNode {
   constraints?: ConstraintInfo;
   typography?: TypographyStyle;
   fills?: ColorValue[];
+  gradients?: GradientFill[];
   strokes?: BorderInfo[];
   effects?: EffectInfo[];
   cornerRadius?: CornerRadiusInfo;

@@ -8,6 +8,7 @@ import {
   FORBIDDEN_TEMPLATE_BATCHING,
   FORBIDDEN_VISUAL_SHORTCUTS,
   MANDATORY_SCREEN_WORKFLOW,
+  ASSETS_AND_QA,
 } from './design-reference';
 import {
   buildScreenSpecDetailSection,
@@ -73,6 +74,8 @@ ${FORBIDDEN_VISUAL_SHORTCUTS}
 
 ${MANDATORY_SCREEN_WORKFLOW}
 
+${ASSETS_AND_QA}
+
 ## Copy fidelity
 
 - Render every string in \`screens/{slug}/copy.json\` **verbatim** (labels, placeholders, button text).
@@ -82,7 +85,8 @@ ${MANDATORY_SCREEN_WORKFLOW}
 
 Build **typed, idiomatic React Native UI** — one proper screen module per catalog entry.
 
-- Read \`screens/{slug}/spec.json\`, \`copy.json\`, \`map.json\`, and \`reference.png\` while implementing each slug.
+- Read \`screens/{slug}/spec.json\`, \`assets.json\`, \`decorative.json\` (when present), \`copy.json\`, \`map.json\`, and \`reference.png\` while implementing each slug.
+- Look up each \`viewKind\` in \`platform/react-native/views.json\` — write real components, not a map renderer.
 - Compose screens from **shared components** (\`src/components/\`) and **screen-local components**.
 - Translate design intent into \`View\`, \`Text\`, \`Pressable\`, \`Image\`, \`StyleSheet\` — not raw percentage boxes for every node.
 

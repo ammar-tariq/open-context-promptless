@@ -47,8 +47,8 @@ function generateReactNativeStarterPrompt(input: StarterPromptInput): string {
 
 **Before you implement any screens:**
 1. Scaffold an **Expo + TypeScript** app with **Expo Router** if one does not exist yet.
-2. Install React Navigation dependencies from \`${contextPath}/navigation-notes.md\`.
-3. Confirm the OpenContext export is at \`${contextPath}/\` (\`BUILD.md\`, \`catalog/screens.json\`, \`screens/\`).
+2. Install dependencies from \`${contextPath}/platform/react-native/packages.json\` (see \`installHint\`).
+3. Confirm the OpenContext export is at \`${contextPath}/\` (\`BUILD.md\`, \`catalog/screens.json\`, \`screens/\`, \`platform/react-native/views.json\`).
 
 **Then build the full app autonomously — do not ask me screen-by-screen:**
 
@@ -57,7 +57,9 @@ function generateReactNativeStarterPrompt(input: StarterPromptInput): string {
 - \`src/screens/_templates/\` shared across multiple slugs
 - \`screenDefinitions.json\` + \`generate-screens.mjs\` codegen stubs
 - \`<FormScreenView step={n} />\` or similar config wrappers
-- Solid-color placeholder blocks where \`map.json\` lists \`asset\` paths
+- Solid-color placeholder blocks where \`map.json\` lists \`asset\` paths or \`decorative.json\` lists decorative PNGs
+- Using \`assets/icons/*.svg\` on React Native (PNG only — use \`assets.json\`)
+- Hand-rolled tab bars / drawer menus in every screen file (use React Navigation navigators)
 - Generic auth gradient+card shell when \`reference.png\` shows a different layout
 - Reordering sections differently from \`spec.json\` → \`sectionOrder\`
 - Marking any screen done without side-by-side \`reference.png\` comparison
@@ -67,15 +69,16 @@ ${variantGuidance}
 1. Read \`${contextPath}/AGENTS.md\` first — especially **Forbidden visual shortcuts** and **Mandatory per-screen workflow**.
 2. Read \`${contextPath}/BUILD.md\` and run every phase in \`${contextPath}/phases/\` (00 → 05).
 3. Implement **all ${input.screenCount} screens** from \`${contextPath}/catalog/screens.json\`.
-4. **Per slug (required order):** open \`reference.png\` → read \`spec.json\` → \`forbiddenShortcuts\` → \`copy.json\` → \`map.json\`.
+4. **Per slug (required order):** open \`reference.png\` → \`spec.json\` → \`assets.json\` → \`decorative.json\` (if present) → \`platform/react-native/views.json\` (for viewKinds used) → \`copy.json\` → \`map.json\`.
 5. Create **unique** \`src/screens/{slug}/index.tsx\` + \`styles.ts\` for each slug.
-6. Wire \`assets/\` from map.json — no color placeholders for image nodes.
-7. Use \`copy.json\` labels, placeholders, and button text **verbatim**.
-8. Match \`spec.json\` → \`sectionOrder\` when present.
-9. Extract shared UI into \`src/components/\` in phase 02 — but fix or override if a shared component diverges from \`reference.png\`.
-10. Load fonts from \`${contextPath}/shared/tokens.json\`.
-11. Do not add extra SafeArea \`paddingTop\` when \`contentArea.top\` is defined.
-12. Compare each screen side-by-side with \`reference.png\` before moving to the next slug.
+6. Wire **PNG** assets from \`assets.json\` / map — no color placeholders for image or decorative nodes.
+7. Render decorative layers from \`decorative.json\` as absolute \`expo-image\` at map opacity (\`pointerEvents: 'none'\`).
+8. Use \`copy.json\` labels, placeholders, and button text **verbatim**.
+9. Match \`spec.json\` → \`sectionOrder\` when present.
+10. Extract shared UI into \`src/components/\` in phase 02 — but fix or override if a shared component diverges from \`reference.png\`.
+11. Load fonts from \`${contextPath}/shared/tokens.json\` (use \`expo-font\` — do not substitute system fonts).
+12. Do not add extra SafeArea \`paddingTop\` when \`contentArea.top\` is defined.
+13. Compare each screen side-by-side with \`reference.png\` before moving to the next slug.
 
 Export target: **${target.label}**
 Work through the entire BUILD.md checklist without stopping for per-screen approval.`;

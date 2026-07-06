@@ -1,7 +1,7 @@
-import type { ExportTargetId } from '@/constants/export-targets';
-import { EXPORT_FILE_NAMES } from '@/constants';
 import type { ExportContext } from './base';
 import { BaseExporter } from './base';
+import type { ExportTargetId } from '@/constants/export-targets';
+import { EXPORT_FILE_NAMES } from '@/constants';
 
 /**
  * Generates platform-specific navigation implementation notes.
@@ -45,40 +45,111 @@ function buildReactNativeNavigationNotes(context: ExportContext): string {
   const linkMappings =
     (platform.linkMappings as Array<Record<string, unknown>> | undefined) ?? [];
   const initialRouteName = String(platform.initialRouteName ?? 'Screen');
+  const drawerSlug = String(platform.drawerMenuSlug ?? 'menu-white');
 
-  return `# React Navigation Notes
+  return `# React Navigation / Expo Router Notes
 
-This export target is optimized for **React Native** apps using **React Navigation**.
+This export uses **real navigators** — not hand-rolled tab bars or menu screens pasted into every file.
+
+Read \`platform/react-native/packages.json\` for install commands and \`platform/react-native/views.json\` for viewKind → library bindings.
 
 ## Recommended packages
 
+- \`expo-router\` (recommended app shell)
 - \`@react-navigation/native\`
 - \`@react-navigation/native-stack\`
+- \`@react-navigation/bottom-tabs\`
+- \`@react-navigation/drawer\`
 - \`react-native-screens\`
 - \`react-native-safe-area-context\`
+- \`react-native-gesture-handler\`
+- \`react-native-reanimated\`
+
+Install: see \`platform/react-native/packages.json\` → \`installHint\`
+
+## Architecture (required)
+
+Use **layered navigators** — do NOT implement navigation chrome separately in each screen:
+
+\`\`\`text
+Root (Expo Router or NavigationContainer)
+├── DrawerNavigator          ← hamburger / side menu (${drawerSlug})
+│   └── TabNavigator         ← bottom tabs when spec.flags.hasBottomTabBar
+│       ├── Stack: main tabs (home, explore, …)
+│       └── Modal stack      ← filter, share, …
+└── Auth stack group         ← sign-in, sign-up, onboarding (no tabs)
+\`\`\`
+
+### Bottom tabs (\`viewKind: bottomTabBar\`)
+
+When \`spec.json\` → \`navigation.bottomTabBar\` is true:
+
+- Use \`@react-navigation/bottom-tabs\` or Expo Router \`(tabs)/\`
+- Match tab **labels, order, icons, active state, and center FAB** from \`reference.png\`
+- **Forbidden:** custom \`<BottomTabBar />\` copy-pasted into every screen
+
+### Drawer / side menu (\`viewKind: drawerTrigger\`)
+
+When \`spec.json\` lists \`navigation.drawerMenuSlug\`:
+
+- Use \`@react-navigation/drawer\` with \`createDrawerNavigator\`
+- Menu content screen: \`${drawerSlug}\` (or slug from spec)
+- Hamburger buttons use \`navigation.openDrawer()\` — wire assets from \`assets.json\`
+
+### Stack screens
+
+All catalog slugs register as stack or tab screens. Modals use \`presentation: 'modal'\`.
 
 ## Screen routes
-
-Map each exported Figma screen to a stack screen:
 
 ${routes.length > 0 ? routes.map(formatRouteLine).join('\n') : '_No screens exported._'}
 
 Suggested \`initialRouteName\`: \`${initialRouteName}\`
 
-## Starter navigator
+## Expo Router layout example
+
+\`\`\`text
+app/
+  _layout.tsx              # Root NavigationContainer / Drawer
+  (auth)/
+    sign-in.tsx
+    sign-up.tsx
+  (tabs)/
+    _layout.tsx            # Tab navigator
+    home.tsx
+    map-view.tsx
+  (drawer)/
+    menu-white.tsx
+  filter.tsx               # modal presentation
+\`\`\`
+
+## React Navigation example (stack + tabs + drawer)
 
 \`\`\`tsx
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
+import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
+import { createDrawerNavigator } from '@react-navigation/drawer';
 
 const Stack = createNativeStackNavigator();
+const Tabs = createBottomTabNavigator();
+const Drawer = createDrawerNavigator();
+
+function MainTabs() {
+  return (
+    <Tabs.Navigator>
+      {/* Register tab screens from catalog/screens.json — match reference.png */}
+    </Tabs.Navigator>
+  );
+}
 
 export function AppNavigator() {
   return (
     <NavigationContainer>
-      <Stack.Navigator initialRouteName="${initialRouteName}">
-${routes.map((route) => `        <Stack.Screen name="${String(route.routeName)}" component={${String(route.componentName)}} />`).join('\n')}
-      </Stack.Navigator>
+      <Drawer.Navigator screenOptions={{ drawerType: 'front' }}>
+        <Drawer.Screen name="Main" component={MainTabs} />
+        <Drawer.Screen name="MenuWhite" component={MenuWhiteScreen} />
+      </Drawer.Navigator>
     </NavigationContainer>
   );
 }
@@ -86,26 +157,23 @@ ${routes.map((route) => `        <Stack.Screen name="${String(route.routeName)}"
 
 ## Prototype link mappings
 
-Wire Figma prototype interactions to React Navigation \`navigate\` calls:
+${linkMappings.length > 0 ? linkMappings.map(formatLinkMapping).join('\n\n') : '_No screen-to-screen prototype links were found. Wire navigation from spec.json and UX flow._'}
 
-${linkMappings.length > 0 ? linkMappings.map(formatLinkMapping).join('\n\n') : '_No screen-to-screen prototype links were found. Add navigation manually from exported screens._'}
+## Per-screen workflow
 
-## How to use this file
-
-1. Create screen components that match the exported Figma screens.
-2. Register them in a native stack navigator using the route names above.
-3. Attach \`onPress\` handlers on the source elements listed below.
-4. Reference \`data.json\` for layout, typography, colors, and assets while implementing each screen.
+1. Read \`screens/{slug}/spec.json\` → \`navigation.requiredNavigators\`
+2. Read \`screens/{slug}/reference.png\` for tab bar / back button / drawer trigger
+3. Thin route files re-export \`src/screens/{slug}/\` — no inline 200-line layouts
 
 ---
 
-See also \`README.md\` and \`data.json\` (\`navigation\` + \`platform\` sections).
+See also \`AGENTS.md\`, \`platform/react-native/views.json\`, and \`README.md\`.
 `;
 }
 
 function formatRouteLine(route: Record<string, unknown>): string {
   const initial = route.isInitial ? ' _(initial)_' : '';
-  return `- \`${String(route.routeName)}\` → \`${String(route.componentName)}\`${initial}`;
+  return `- \`${String(route.routeName)}\` → \`src/screens/${String(route.slug ?? route.routeName).toLowerCase()}/\`${initial}`;
 }
 
 function formatLinkMapping(link: Record<string, unknown>): string {

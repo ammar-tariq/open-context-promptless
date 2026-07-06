@@ -20,6 +20,7 @@ import type {
   TypographyStyle,
   VariableBinding,
 } from '@/types';
+import type { GradientFill, GradientStop } from '@/types/fills';
 import { PLUGIN_VERSION } from '@/constants';
 import { formatExportDate, getBoundVariables, hasVisibleContent, rgbToColorValue } from '@/utils';
 import { collectNavigationLinks } from './navigation';
@@ -133,6 +134,7 @@ async function parseNodeTree(node: SceneNode, context: ParseContext): Promise<Pa
     constraints: extractConstraints(node),
     typography,
     fills: extractFills(node),
+    gradients: extractGradients(node),
     strokes: extractStrokes(node),
     effects: extractEffects(node),
     cornerRadius: extractCornerRadius(node),
@@ -413,6 +415,51 @@ function extractFills(node: SceneNode): ColorValue[] | undefined {
   }
 
   return fills.length > 0 ? fills : undefined;
+}
+
+function extractGradients(node: SceneNode): GradientFill[] | undefined {
+  if (!('fills' in node) || node.fills === figma.mixed || !Array.isArray(node.fills)) {
+    return undefined;
+  }
+
+  const gradients: GradientFill[] = [];
+
+  for (const paint of node.fills) {
+    if (paint.visible === false) {
+      continue;
+    }
+
+    if (paint.type === 'GRADIENT_LINEAR') {
+      gradients.push({
+        type: 'linear',
+        angle: gradientHandleToDegrees(paint.gradientTransform),
+        stops: paint.gradientStops.map((stop: GradientStop) => ({
+          color: rgbToColorValue(stop.color, stop.color.a),
+          position: stop.position,
+        })),
+      });
+      continue;
+    }
+
+    if (paint.type === 'GRADIENT_RADIAL') {
+      gradients.push({
+        type: 'radial',
+        stops: paint.gradientStops.map((stop: GradientStop) => ({
+          color: rgbToColorValue(stop.color, stop.color.a),
+          position: stop.position,
+        })),
+      });
+    }
+  }
+
+  return gradients.length > 0 ? gradients : undefined;
+}
+
+function gradientHandleToDegrees(transform: Transform): number {
+  const [[a, b]] = transform;
+  const radians = Math.atan2(b, a);
+  const degrees = (radians * 180) / Math.PI;
+  return Math.round(degrees);
 }
 
 function extractStrokes(node: SceneNode): BorderInfo[] | undefined {

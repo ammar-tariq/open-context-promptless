@@ -6,6 +6,8 @@ import type {
   ScreenMap,
   ScreenSpec,
 } from '@/types/map';
+import { collectViewKinds, walkMapViews } from '@/map/map-builder';
+import { detectDrawerMenuSlug } from '@/map/view-kind';
 import { normalizeScreenName } from '@/utils/screen-slug';
 
 export interface VariantGroupInfo {
@@ -18,6 +20,7 @@ export interface BuildScreenSpecOptions {
   map: ScreenMap;
   slug: string;
   variantGroups: VariantGroupInfo[];
+  allSlugs?: string[];
 }
 
 interface CollectedText {
@@ -225,13 +228,89 @@ function detectBottomTabBar(texts: CollectedText[]): boolean {
 function countImageAssets(map: ScreenMap): number {
   let count = 0;
 
-  walkViews(map.views, (node) => {
-    if (node.visible && node.asset?.includes('/images/')) {
+  walkMapViews(map.views, (node) => {
+    if (node.visible && node.asset?.includes('/images/') && node.asset.endsWith('.png')) {
       count += 1;
     }
   });
 
   return count;
+}
+
+function detectDecorativeFlags(map: ScreenMap): {
+  hasDecorativeBackground: boolean;
+  hasBlur: boolean;
+  hasLinearGradient: boolean;
+} {
+  let hasDecorativeBackground = false;
+  let hasBlur = false;
+  let hasLinearGradient = false;
+
+  walkMapViews(map.views, (node) => {
+    if (node.role === 'decorative' || node.viewKind === 'decorative') {
+      hasDecorativeBackground = true;
+    }
+    if (node.viewKind === 'blurView' || node.style?.blur) {
+      hasBlur = true;
+    }
+    if (node.viewKind === 'linearGradient' || node.style?.gradient) {
+      hasLinearGradient = true;
+    }
+  });
+
+  return { hasDecorativeBackground, hasBlur, hasLinearGradient };
+}
+
+function detectBackButton(map: ScreenMap, slug: string): boolean {
+  if (/sign-up|onboarding|reset|resset|verification/i.test(slug)) {
+    return true;
+  }
+
+  let found = false;
+  walkMapViews(map.views, (node) => {
+    if (found) {
+      return;
+    }
+
+    if (node.viewKind === 'drawerTrigger') {
+      return;
+    }
+
+    const name = node.name.toLowerCase();
+    if (name.includes('back') || name.includes('chevron') || name.includes('arrow-left')) {
+      found = true;
+    }
+  });
+
+  return found;
+}
+
+function detectScreenBackground(map: ScreenMap): string | undefined {
+  for (const view of map.views) {
+    if (view.style?.backgroundColor && view.placement.absolute.widthPercent && view.placement.absolute.widthPercent > 90) {
+      return view.style.backgroundColor;
+    }
+  }
+
+  return undefined;
+}
+
+function buildRequiredNavigators(
+  flags: ScreenSpec['flags'],
+  slug: string,
+  drawerSlug: string | null,
+): string[] {
+  const navigators: string[] = ['native-stack'];
+
+  if (flags.hasBottomTabBar) {
+    navigators.push('bottom-tabs');
+  }
+
+  if (drawerSlug && (slug === drawerSlug || /home|menu/i.test(slug))) {
+    navigators.push('drawer');
+  }
+
+  return navigators;
 }
 
 const SECTION_HEADING_PATTERN =
@@ -350,13 +429,16 @@ function buildImplementationChecklist(
     | 'variantOf'
     | 'variantNote'
     | 'sectionOrder'
+    | 'navigation'
+    | 'viewKindsUsed'
   >,
 ): string[] {
   const checklist: string[] = [
     `STOP — open screens/${spec.slug}/reference.png and keep it visible while coding`,
     `Read screens/${spec.slug}/spec.json → forbiddenShortcuts before writing any layout code`,
     `Read screens/${spec.slug}/copy.json — every string must appear verbatim in the UI`,
-    `Implement in src/screens/${spec.slug}/index.tsx + styles.ts (unique to this slug — no config wrapper)`,
+    `Read platform/react-native/views.json — look up viewKind for each node in map.json`,
+    `Read screens/${spec.slug}/assets.json and decorative.json — wire every PNG path listed`,
   ];
 
   if (spec.sectionOrder && spec.sectionOrder.length >= 2) {
@@ -364,6 +446,40 @@ function buildImplementationChecklist(
       `Render sections top-to-bottom in this order: ${spec.sectionOrder.map((s) => `"${s}"`).join(' → ')}`,
     );
   }
+
+  if (spec.flags.hasDecorativeBackground) {
+    checklist.push(
+      'Render decorative layers from decorative.json as absolute Images at map opacity — NOT solid colored Views',
+    );
+  }
+
+  if (spec.flags.hasLinearGradient) {
+    checklist.push('Use expo-linear-gradient when style.gradient is present — or decorative PNG fallback');
+  }
+
+  if (spec.flags.hasBlur) {
+    checklist.push('Use expo-blur BlurView when style.blur is present — not a semi-transparent View');
+  }
+
+  if (spec.navigation.bottomTabBar) {
+    checklist.push(
+      'Use @react-navigation/bottom-tabs (or Expo Router tabs) — do NOT paste a custom tab bar into this screen file',
+    );
+  }
+
+  if (spec.navigation.drawerMenuSlug) {
+    checklist.push(
+      `Side menu: use @react-navigation/drawer — menu screen slug is "${spec.navigation.drawerMenuSlug}"`,
+    );
+  }
+
+  if (spec.navigation.hasBackButton) {
+    checklist.push('Include back navigation control matching reference.png');
+  }
+
+  checklist.push(
+    `Implement in src/screens/${spec.slug}/index.tsx + styles.ts (unique to this slug — no config wrapper)`,
+  );
 
   if (spec.flags.hasImageAssets) {
     checklist.push(
@@ -458,7 +574,7 @@ export function buildScreenSpec(options: BuildScreenSpecOptions): {
   spec: ScreenSpec;
   copy: ScreenCopyManifest;
 } {
-  const { map, slug, variantGroups } = options;
+  const { map, slug, variantGroups, allSlugs = [] } = options;
   const texts = collectVisibleTexts(map);
   const copyGrouped = categorizeCopy(texts);
   const allStrings = uniqueStrings(texts.map((t) => t.content));
@@ -475,12 +591,35 @@ export function buildScreenSpec(options: BuildScreenSpecOptions): {
   const hasBottomTabBar = detectBottomTabBar(texts);
   const hasImageAssets = countImageAssets(map) > 0;
   const sectionOrder = buildSectionOrder(texts);
+  const decorativeFlags = detectDecorativeFlags(map);
+  const viewKindsUsed = collectViewKinds(map);
+  const drawerMenuSlug = detectDrawerMenuSlug(allSlugs);
+  const hasBackButton = detectBackButton(map, slug);
+  const backgroundColor = detectScreenBackground(map);
 
   const screenKind = classifyScreenKind(slug, copyGrouped, allStrings);
   const layoutPattern = detectLayoutPattern(slug, map, screenKind, hasWhiteCard);
   const variantNote = variantOf
     ? buildVariantNote(slug, canonicalSlug, screenKind, group?.memberSlugs.length ?? 1)
     : undefined;
+
+  const flags = {
+    hasProgressStep,
+    hasFileUpload,
+    hasBottomTabBar,
+    hasWhiteCard,
+    hasImageAssets,
+    hasDecorativeBackground: decorativeFlags.hasDecorativeBackground,
+    hasBlur: decorativeFlags.hasBlur,
+    hasLinearGradient: decorativeFlags.hasLinearGradient,
+  };
+
+  const navigation = {
+    bottomTabBar: hasBottomTabBar,
+    drawerMenuSlug,
+    hasBackButton,
+    requiredNavigators: buildRequiredNavigators(flags, slug, drawerMenuSlug),
+  };
 
   const specBase = {
     slug,
@@ -491,21 +630,18 @@ export function buildScreenSpec(options: BuildScreenSpecOptions): {
     layoutPattern,
     variantOf,
     variantNote,
+    backgroundColor,
+    navigation,
     sectionOrder: sectionOrder.length >= 2 ? sectionOrder : undefined,
-    flags: {
-      hasProgressStep,
-      hasFileUpload,
-      hasBottomTabBar,
-      hasWhiteCard,
-      hasImageAssets,
-    },
+    flags,
     copy: copyGrouped,
+    viewKindsUsed,
   };
 
   const spec: ScreenSpec = {
     ...specBase,
     implementationChecklist: [],
-    forbiddenShortcuts: buildForbiddenShortcuts(slug, variantOf, screenKind, specBase.flags),
+    forbiddenShortcuts: buildForbiddenShortcuts(slug, variantOf, screenKind, specBase.flags, decorativeFlags),
   };
 
   spec.implementationChecklist = buildImplementationChecklist(spec);
@@ -525,6 +661,7 @@ function buildForbiddenShortcuts(
   variantOf: string | null,
   screenKind: ScreenKind,
   flags: ScreenSpec['flags'],
+  decorativeFlags: ReturnType<typeof detectDecorativeFlags>,
 ): string[] {
   const shortcuts = [
     'Do not route this slug through a shared FormScreenView / HomeScreenView / ListScreenView template',
@@ -543,6 +680,14 @@ function buildForbiddenShortcuts(
 
   if (screenKind === 'home') {
     shortcuts.push('Do not reorder content sections differently from spec.json sectionOrder');
+  }
+
+  if (decorativeFlags.hasDecorativeBackground) {
+    shortcuts.push('Do not use solid opaque View circles for decorative blobs — use decorative.json PNG assets at map opacity');
+  }
+
+  if (flags.hasBottomTabBar) {
+    shortcuts.push('Do not implement a one-off custom tab bar in this screen — use bottom-tabs navigator');
   }
 
   if (variantOf) {

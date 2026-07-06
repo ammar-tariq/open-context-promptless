@@ -1,4 +1,5 @@
 import type { Bounds, ConstraintInfo } from '@/types';
+import type { BlurEffect, GradientFill } from '@/types/fills';
 
 export interface ContentArea {
   top: number;
@@ -59,22 +60,50 @@ export interface MapViewStyle {
   backgroundColor?: string;
   borderRadius?: number;
   opacity?: number;
+  gradient?: GradientFill;
+  blur?: BlurEffect;
 }
+
+/** Maps to platform/react-native/views.json — not a runtime renderer. */
+export type ViewKind =
+  | 'screen'
+  | 'container'
+  | 'text'
+  | 'textField'
+  | 'primaryButton'
+  | 'icon'
+  | 'image'
+  | 'decorative'
+  | 'linearGradient'
+  | 'blurView'
+  | 'bottomTabBar'
+  | 'drawerTrigger'
+  | 'navigation'
+  | 'statusBar';
+
+export type MapNodeRole = 'statusBar' | 'content' | 'decorative' | 'navigation';
 
 export interface MapViewNode {
   id: string;
   figmaId: string;
   type: string;
   name: string;
+  viewKind: ViewKind;
   zIndex: number;
   visible: boolean;
-  role?: 'statusBar' | 'content';
+  role: MapNodeRole;
   sizing?: 'intrinsic' | 'fixed';
   placement: ViewPlacement;
   placementPixels: PlacementPixels;
   style?: MapViewStyle;
   text?: MapTextStyle;
+  /** PNG path under assets/images/ — primary for React Native exports */
   asset?: string;
+  implementation?: {
+    dictionaryRef: string;
+    pointerEvents?: 'none' | 'auto';
+    notes?: string;
+  };
   source?: { autoLayout?: boolean };
   children: MapViewNode[];
 }
@@ -120,11 +149,11 @@ export interface ScreenCopyFields {
   body: string[];
 }
 
-export interface ScreenCopyManifest {
-  slug: string;
-  name: string;
-  strings: string[];
-  copy: ScreenCopyFields;
+export interface ScreenNavigationHints {
+  bottomTabBar: boolean;
+  drawerMenuSlug: string | null;
+  hasBackButton: boolean;
+  requiredNavigators: string[];
 }
 
 export interface ScreenSpec {
@@ -136,18 +165,85 @@ export interface ScreenSpec {
   layoutPattern: LayoutPattern;
   variantOf: string | null;
   variantNote?: string;
+  backgroundColor?: string;
+  navigation: ScreenNavigationHints;
   flags: {
     hasProgressStep: boolean;
     hasFileUpload: boolean;
     hasBottomTabBar: boolean;
     hasWhiteCard: boolean;
     hasImageAssets: boolean;
+    hasDecorativeBackground: boolean;
+    hasBlur: boolean;
+    hasLinearGradient: boolean;
   };
-  /** Major section headings in top-to-bottom order (from map topPercent). */
   sectionOrder?: string[];
   copy: ScreenCopyFields;
+  viewKindsUsed: ViewKind[];
   implementationChecklist: string[];
   forbiddenShortcuts: string[];
+}
+
+export interface DecorativeLayerEntry {
+  figmaId: string;
+  name: string;
+  viewKind: 'decorative' | 'linearGradient' | 'blurView';
+  asset?: string;
+  opacity?: number;
+  placement: ViewPlacement;
+  placementPixels: PlacementPixels;
+  gradient?: GradientFill;
+  blur?: BlurEffect;
+  renderHint: string;
+}
+
+export interface ScreenDecorativeManifest {
+  slug: string;
+  layers: DecorativeLayerEntry[];
+}
+
+export interface ScreenAssetsManifest {
+  slug: string;
+  /** All PNG paths referenced on this screen */
+  assets: string[];
+  decorative: string[];
+  icons: string[];
+  photos: string[];
+}
+
+export interface AssetManifestEntry {
+  path: string;
+  type: 'png';
+  width?: number;
+  height?: number;
+  usedBySlugs: string[];
+  category: 'photo' | 'icon' | 'decorative' | 'other';
+}
+
+export interface AssetManifest {
+  format: 'png-only';
+  exportTarget: string;
+  totalCount: number;
+  assets: AssetManifestEntry[];
+}
+
+export interface ExportWarning {
+  code: string;
+  message: string;
+  slug?: string;
+  figmaId?: string;
+  assetPath?: string;
+}
+
+export interface ExportWarningsManifest {
+  warnings: ExportWarning[];
+}
+
+export interface ScreenCopyManifest {
+  slug: string;
+  name: string;
+  strings: string[];
+  copy: ScreenCopyFields;
 }
 
 export interface ScreenCatalogEntry {
@@ -165,6 +261,8 @@ export interface ScreenCatalogEntry {
     meta: string;
     spec: string;
     copy: string;
+    assets: string;
+    decorative: string;
   };
   frame: { width: number; height: number };
 }
@@ -185,4 +283,13 @@ export interface ExportOptions {
 export interface ScreenFrameContext {
   screenBounds: Bounds;
   contentArea: ContentArea;
+}
+
+export interface BuildMapOptions {
+  slug: string;
+  contentArea: ContentArea;
+  figmaNode?: SceneNode;
+  zIndexStart?: number;
+  rasterOnly?: boolean;
+  allSlugs?: string[];
 }

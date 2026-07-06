@@ -79,6 +79,8 @@ export function buildCatalogEntries(
         meta: `screens/${slug}/meta.json`,
         spec: `screens/${slug}/spec.json`,
         copy: `screens/${slug}/copy.json`,
+        assets: `screens/${slug}/assets.json`,
+        decorative: `screens/${slug}/decorative.json`,
       },
       frame: {
         width: Math.round(screen.bounds.width),
