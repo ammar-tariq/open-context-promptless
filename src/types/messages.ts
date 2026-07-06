@@ -6,6 +6,7 @@ export type PluginMessageType =
   | 'INIT_RESPONSE'
   | 'GENERATE_CONTEXT'
   | 'GENERATE_PROGRESS'
+  | 'EXPORT_FILE'
   | 'GENERATE_SUCCESS'
   | 'GENERATE_ERROR'
   | 'RESIZE_UI';
@@ -35,10 +36,18 @@ export interface GenerateProgressPayload {
   progress: number;
 }
 
+export interface ExportFilePayload {
+  folderName: string;
+  path: string;
+  content: string;
+  encoding?: 'utf8' | 'base64';
+}
+
 export interface GenerateSuccessPayload {
-  zipBase64: string;
-  zipFileName: string;
   summary: ExportSummary;
+  folderName: string;
+  fileCount: number;
+  exportDirectory: string;
 }
 
 export interface GenerateErrorPayload {
@@ -56,6 +65,7 @@ export type PluginMessagePayload =
   | InitResponsePayload
   | GenerateContextPayload
   | GenerateProgressPayload
+  | ExportFilePayload
   | GenerateSuccessPayload
   | GenerateErrorPayload
   | ResizeUiPayload

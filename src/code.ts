@@ -112,11 +112,23 @@ figma.ui.onmessage = async (message: PluginMessage) => {
           },
         );
 
+        for (const file of result.files) {
+          postToUi(
+            createMessage('EXPORT_FILE', {
+              folderName: result.folderName,
+              path: file.path,
+              content: file.content,
+              encoding: file.encoding ?? 'utf8',
+            }),
+          );
+        }
+
         postToUi(
           createMessage('GENERATE_SUCCESS', {
-            zipBase64: result.zipBase64,
-            zipFileName: result.zipFileName,
             summary: result.summary,
+            folderName: result.folderName,
+            fileCount: result.files.length,
+            exportDirectory: result.folderName,
           }),
         );
       } catch (error) {

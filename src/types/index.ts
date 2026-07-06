@@ -228,6 +228,7 @@ export interface ExportSummary {
   imageCount: number;
   iconCount: number;
   exportedAssetCount: number;
+  deduplicatedAssetCount: number;
   skippedAssetCount: number;
   navigationLinkCount: number;
   textElementCount: number;

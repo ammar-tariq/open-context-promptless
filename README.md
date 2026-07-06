@@ -90,7 +90,7 @@ pnpm format
 4. Open the plugin and check the screens you want to export
 5. Enter a project name and click **Generate Context**
 
-The plugin downloads a `context.zip` archive containing the exported package.
+The plugin writes a `context/` folder to a directory you choose (no zip archive).
 
 ## Architecture
 

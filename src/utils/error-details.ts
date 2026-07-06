@@ -88,6 +88,10 @@ function formatErrorLike(error: Error, code: string): string {
 }
 
 function serializeUnknownError(error: unknown, code: string): string {
+  if (error === null || error === undefined) {
+    return [`Code: ${code}`, `Value: ${String(error)}`].join('\n');
+  }
+
   if (error instanceof Error) {
     return formatErrorLike(error, code);
   }

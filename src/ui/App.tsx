@@ -6,6 +6,11 @@ import {
   requestScreenListRefresh,
 } from '@/hooks/usePluginMessaging';
 import { createMessage } from '@/types/messages';
+import {
+  isFolderExportSupported,
+  requestExportDirectory,
+  setActiveExportDirectory,
+} from '@/ui/utils/folder-export';
 import './styles.css';
 
 function formatScreenType(type: string): string {
@@ -149,6 +154,9 @@ function StatusMessage() {
           <li>{summary.imageCount} images</li>
           <li>{summary.iconCount} icons</li>
           <li>{summary.exportedAssetCount} exported asset files</li>
+          {summary.deduplicatedAssetCount > 0 ? (
+            <li>{summary.deduplicatedAssetCount} duplicate assets reused</li>
+          ) : null}
           <li>{summary.navigationLinkCount} prototype links</li>
           {summary.skippedAssetCount > 0 ? (
             <li>{summary.skippedAssetCount} assets skipped (see plugin console)</li>
@@ -198,15 +206,38 @@ export function App() {
   const canGenerate =
     selectedScreenCount > 0 && projectName.trim().length > 0 && !isGenerating;
 
-  const handleGenerate = () => {
-    setLoading();
-    postPluginMessage(
-      createMessage('GENERATE_CONTEXT', {
-        projectName: projectName.trim(),
-        exportTarget,
-        selectedScreenIds: checkedScreenIds,
-      }),
-    );
+  const handleGenerate = async () => {
+    if (!isFolderExportSupported()) {
+      usePluginStore.getState().setError({
+        code: 'FOLDER_EXPORT_UNSUPPORTED',
+        message: 'Folder export is not supported in this environment.',
+        details: 'Use Figma desktop (Chromium) to pick an export directory.',
+      });
+      return;
+    }
+
+    try {
+      const directoryHandle = await requestExportDirectory();
+      setActiveExportDirectory(directoryHandle);
+      setLoading();
+      postPluginMessage(
+        createMessage('GENERATE_CONTEXT', {
+          projectName: projectName.trim(),
+          exportTarget,
+          selectedScreenIds: checkedScreenIds,
+        }),
+      );
+    } catch (error) {
+      if (error instanceof DOMException && error.name === 'AbortError') {
+        return;
+      }
+
+      usePluginStore.getState().setError({
+        code: 'EXPORT_DIRECTORY_FAILED',
+        message: 'Could not open export directory.',
+        details: error instanceof Error ? error.message : String(error),
+      });
+    }
   };
 
   return (
@@ -276,8 +307,8 @@ export function App() {
       </main>
 
       <footer className="footer">
-        Exports a <code>context/</code> folder with README, structured JSON, navigation links, and
-        optional platform notes.
+        Exports a <code>context/</code> folder to the directory you choose, with README, JSON,
+        navigation links, and assets.
       </footer>
     </div>
   );

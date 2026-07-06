@@ -15,6 +15,7 @@ export interface SkippedAssetExport {
 export interface AssetExportResult {
   files: ContextPackageFile[];
   exportedAssetCount: number;
+  deduplicatedAssetCount: number;
   skippedAssets: SkippedAssetExport[];
   nodeExportPaths: Map<string, string>;
   nodeRasterExportPaths: Map<string, string>;
@@ -30,8 +31,21 @@ interface ExportCandidate {
   kind: 'image' | 'icon';
 }
 
+interface DedupGroup {
+  key: string;
+  representative: ExportCandidate;
+  nodeIds: string[];
+}
+
+interface ExportedAssetPaths {
+  vectorPath?: string;
+  rasterPath?: string;
+  files: ContextPackageFile[];
+}
+
 /**
  * Exports cropped raster assets and vector/icon files from the parsed design.
+ * Deduplicates shared images (by hash) and repeated component icons.
  */
 export async function exportDesignAssets(
   design: ParsedDesign,
@@ -42,14 +56,18 @@ export async function exportDesignAssets(
   const usedFileNames = new Set<string>();
   const nodeExportPaths = new Map<string, string>();
   const nodeRasterExportPaths = new Map<string, string>();
+  const exportedByKey = new Map<string, ExportedAssetPaths>();
 
   const candidates = [
     ...collectExportCandidates(design.images, 'image'),
     ...collectExportCandidates(design.icons, 'icon'),
   ];
 
-  const totalSteps = candidates.reduce((count, candidate) => {
-    return count + (candidate.kind === 'icon' ? 2 : 1);
+  const groups = await buildDedupGroups(candidates);
+  const deduplicatedAssetCount = Math.max(0, candidates.length - groups.length);
+
+  const totalSteps = groups.reduce((count, group) => {
+    return count + (group.representative.kind === 'icon' ? 2 : 1);
   }, 0);
 
   let completedSteps = 0;
@@ -59,44 +77,50 @@ export async function exportDesignAssets(
     onProgress?.(stage, progress);
   };
 
-  for (const candidate of candidates) {
+  for (const group of groups) {
+    const candidate = group.representative;
+    const exported: ExportedAssetPaths = { files: [] };
+
     if (candidate.kind === 'image') {
-      report(`Exporting cropped image ${completedSteps + 1} of ${totalSteps || 1}`);
-      const exported = await exportCroppedRaster(candidate, usedFileNames, skippedAssets);
-      if (exported) {
-        files.push(exported.file);
-        nodeRasterExportPaths.set(candidate.nodeId, exported.exportPath);
+      report(`Exporting image ${completedSteps + 1} of ${totalSteps || 1}`);
+      const rasterExport = await exportCroppedRaster(candidate, usedFileNames, skippedAssets);
+      if (rasterExport) {
+        exported.files.push(rasterExport.file);
+        exported.rasterPath = rasterExport.exportPath;
       }
       completedSteps += 1;
-      continue;
-    }
+    } else {
+      report(`Exporting icon SVG ${completedSteps + 1} of ${totalSteps || 1}`);
+      const svgExport = await exportIconSvg(candidate, usedFileNames, skippedAssets);
+      if (svgExport) {
+        exported.files.push(svgExport.file);
+        exported.vectorPath = svgExport.exportPath;
+      }
+      completedSteps += 1;
 
-    report(`Exporting icon SVG ${completedSteps + 1} of ${totalSteps || 1}`);
-    const svgExport = await exportIconSvg(candidate, usedFileNames, skippedAssets);
-    if (svgExport) {
-      files.push(svgExport.file);
-      nodeExportPaths.set(candidate.nodeId, svgExport.exportPath);
-    }
-    completedSteps += 1;
-
-    report(`Exporting icon image ${completedSteps + 1} of ${totalSteps || 1}`);
-    const rasterExport = await exportCroppedRaster(
-      {
-        ...candidate,
-        reference: {
-          ...candidate.reference,
-          name: `${candidate.reference.name}-icon`,
+      report(`Exporting icon PNG ${completedSteps + 1} of ${totalSteps || 1}`);
+      const rasterExport = await exportCroppedRaster(
+        {
+          ...candidate,
+          reference: {
+            ...candidate.reference,
+            name: `${candidate.reference.name}-icon`,
+          },
         },
-      },
-      usedFileNames,
-      skippedAssets,
-      'png',
-    );
-    if (rasterExport) {
-      files.push(rasterExport.file);
-      nodeRasterExportPaths.set(candidate.nodeId, rasterExport.exportPath);
+        usedFileNames,
+        skippedAssets,
+        'png',
+      );
+      if (rasterExport) {
+        exported.files.push(rasterExport.file);
+        exported.rasterPath = rasterExport.exportPath;
+      }
+      completedSteps += 1;
     }
-    completedSteps += 1;
+
+    exportedByKey.set(group.key, exported);
+    files.push(...exported.files);
+    applyExportedPaths(group.nodeIds, exported, nodeExportPaths, nodeRasterExportPaths);
   }
 
   if (skippedAssets.length > 0) {
@@ -108,9 +132,16 @@ export async function exportDesignAssets(
     );
   }
 
+  if (deduplicatedAssetCount > 0) {
+    console.info(
+      `[OpenContext] Reused exports for ${deduplicatedAssetCount} duplicate asset reference(s).`,
+    );
+  }
+
   return {
     files,
     exportedAssetCount: files.length,
+    deduplicatedAssetCount,
     skippedAssets,
     nodeExportPaths,
     nodeRasterExportPaths,
@@ -168,25 +199,93 @@ export function enrichDesignWithAssetPaths(
   };
 }
 
+function applyExportedPaths(
+  nodeIds: string[],
+  exported: ExportedAssetPaths,
+  nodeExportPaths: Map<string, string>,
+  nodeRasterExportPaths: Map<string, string>,
+): void {
+  for (const nodeId of nodeIds) {
+    if (exported.vectorPath) {
+      nodeExportPaths.set(nodeId, exported.vectorPath);
+    }
+    if (exported.rasterPath) {
+      nodeRasterExportPaths.set(nodeId, exported.rasterPath);
+    }
+  }
+}
+
+async function buildDedupGroups(candidates: ExportCandidate[]): Promise<DedupGroup[]> {
+  const groupMap = new Map<string, DedupGroup>();
+
+  for (const candidate of candidates) {
+    const key = await resolveDedupKey(candidate);
+    const existing = groupMap.get(key);
+
+    if (existing) {
+      existing.nodeIds.push(candidate.nodeId);
+      continue;
+    }
+
+    groupMap.set(key, {
+      key,
+      representative: candidate,
+      nodeIds: [candidate.nodeId],
+    });
+  }
+
+  return Array.from(groupMap.values());
+}
+
+async function resolveDedupKey(candidate: ExportCandidate): Promise<string> {
+  if (candidate.kind === 'image') {
+    if (candidate.reference.hash) {
+      return `image-hash:${candidate.reference.hash}`;
+    }
+    return `image-node:${candidate.nodeId}`;
+  }
+
+  const node = await figma.getNodeByIdAsync(candidate.nodeId);
+  if (node?.type === 'INSTANCE') {
+    try {
+      const mainComponent = await node.getMainComponentAsync();
+      if (mainComponent) {
+        return `icon-component:${mainComponent.id}`;
+      }
+    } catch {
+      // Fall through to node-based key.
+    }
+  }
+
+  if (node && isVectorLikeNode(node.type)) {
+    const bounds = 'width' in node && 'height' in node ? `${node.width}x${node.height}` : 'unknown';
+    const signature = slugify(candidate.reference.name) || 'icon';
+    return `icon-vector:${signature}:${bounds}`;
+  }
+
+  return `icon-node:${candidate.nodeId}`;
+}
+
+function isVectorLikeNode(type: string): boolean {
+  return (
+    type === 'VECTOR' ||
+    type === 'BOOLEAN_OPERATION' ||
+    type === 'STAR' ||
+    type === 'LINE' ||
+    type === 'POLYGON' ||
+    type === 'ELLIPSE'
+  );
+}
+
 function collectExportCandidates(
   assets: AssetReference[],
   kind: ExportCandidate['kind'],
 ): ExportCandidate[] {
-  const seen = new Set<string>();
-
-  return assets
-    .filter((asset) => {
-      if (seen.has(asset.id)) {
-        return false;
-      }
-      seen.add(asset.id);
-      return true;
-    })
-    .map((reference) => ({
-      reference,
-      nodeId: reference.id,
-      kind,
-    }));
+  return assets.map((reference) => ({
+    reference,
+    nodeId: reference.id,
+    kind,
+  }));
 }
 
 async function exportCroppedRaster(
@@ -254,21 +353,18 @@ async function exportNodeRaster(
   candidate: ExportCandidate,
   skippedAssets: SkippedAssetExport[],
 ): Promise<Uint8Array | null> {
+  const hashBytes = await exportImageHashBytes(candidate.reference.hash);
+  if (hashBytes) {
+    return hashBytes;
+  }
+
   const node = await resolveExportNode(candidate.nodeId);
   if (!node || !('exportAsync' in node)) {
-    const hashBytes = await exportImageHashBytes(candidate.reference.hash);
-    if (hashBytes) {
-      return hashBytes;
-    }
     recordSkippedAsset(skippedAssets, candidate, 'Node is missing or cannot be exported.');
     return null;
   }
 
   if (!hasNonZeroBounds(node)) {
-    const hashBytes = await exportImageHashBytes(candidate.reference.hash);
-    if (hashBytes) {
-      return hashBytes;
-    }
     recordSkippedAsset(skippedAssets, candidate, 'Node has zero size.');
     return null;
   }
@@ -279,14 +375,6 @@ async function exportNodeRaster(
       constraint: { type: 'SCALE', value: RASTER_EXPORT_SCALE },
     });
   } catch (error) {
-    const hashBytes = await exportImageHashBytes(candidate.reference.hash);
-    if (hashBytes) {
-      console.warn(
-        `[OpenContext] Cropped export failed for "${candidate.reference.name}" (${candidate.nodeId}); used embedded image bytes instead.`,
-      );
-      return hashBytes;
-    }
-
     recordSkippedAsset(skippedAssets, candidate, formatExportFailure(error));
     return null;
   }

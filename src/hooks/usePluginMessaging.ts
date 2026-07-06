@@ -1,11 +1,15 @@
 import { useEffect } from 'react';
 import { createMessage } from '@/types/messages';
 import type {
+  ExportFilePayload,
   GenerateErrorPayload,
   InitResponsePayload,
   PluginMessage,
 } from '@/types/messages';
-import { downloadZipArchive } from '@/ui/utils/download';
+import {
+  clearActiveExportDirectory,
+  writeExportFile,
+} from '@/ui/utils/folder-export';
 import { usePluginStore } from '@/ui/store/plugin-store';
 
 const FIGMA_ORIGIN = 'https://www.figma.com';
@@ -31,6 +35,16 @@ function isGenerateErrorPayload(payload: unknown): payload is GenerateErrorPaylo
   );
 }
 
+function isExportFilePayload(payload: unknown): payload is ExportFilePayload {
+  return (
+    typeof payload === 'object' &&
+    payload !== null &&
+    'folderName' in payload &&
+    'path' in payload &&
+    'content' in payload
+  );
+}
+
 /**
  * Bridges Figma plugin messages with the React UI store.
  */
@@ -53,20 +67,38 @@ export function usePluginMessaging(): void {
             setProgress(message.payload.stage, message.payload.progress);
           }
           break;
+        case 'EXPORT_FILE':
+          if (isExportFilePayload(message.payload)) {
+            try {
+              await writeExportFile(message.payload);
+            } catch (error) {
+              clearActiveExportDirectory();
+              setError({
+                code: 'EXPORT_WRITE_FAILED',
+                message:
+                  error instanceof Error
+                    ? error.message
+                    : 'Failed to write export files to the selected folder.',
+                details: error instanceof Error ? error.stack ?? error.message : String(error),
+              });
+            }
+          }
+          break;
         case 'GENERATE_SUCCESS':
           if (
             message.payload &&
             'summary' in message.payload &&
-            'zipBase64' in message.payload &&
-            'zipFileName' in message.payload
+            'folderName' in message.payload &&
+            'fileCount' in message.payload
           ) {
             setSuccess(message.payload.summary);
-            downloadZipArchive(message.payload.zipBase64, message.payload.zipFileName);
+            clearActiveExportDirectory();
           }
           break;
         case 'GENERATE_ERROR':
           if (isGenerateErrorPayload(message.payload)) {
             console.error('[OpenContext UI] Export failed\n', message.payload.details);
+            clearActiveExportDirectory();
             setError(message.payload);
           }
           break;

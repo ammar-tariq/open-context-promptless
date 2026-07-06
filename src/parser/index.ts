@@ -589,7 +589,10 @@ function extractAssets(node: SceneNode, context: ParseContext): AssetReference[]
     node.type === 'STAR' ||
     node.type === 'LINE' ||
     node.type === 'POLYGON' ||
-    node.type === 'ELLIPSE'
+    node.type === 'ELLIPSE' ||
+    (node.type === 'INSTANCE' &&
+      bounds.width <= 128 &&
+      bounds.height <= 128)
   ) {
     if (bounds.width > 0.01 && bounds.height > 0.01) {
       const icon: AssetReference = {

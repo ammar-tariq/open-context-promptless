@@ -1,12 +1,11 @@
 import type { ExportTargetId } from '@/constants/export-targets';
-import type { ExportSummary, ParsedDesign } from '@/types';
+import type { ContextPackage, ExportSummary, ParsedDesign } from '@/types';
 import { validateProjectName } from '@/shared/schemas';
 import { exportContextPackage } from '@/exporters';
 import { parseDesign } from '@/parser';
 import { validateExportTargetId } from '@/platforms';
 import { ExportLikeError, extractErrorDetails } from '@/utils/error-details';
 import { exportDesignAssets, enrichDesignWithAssetPaths } from './asset-export-service';
-import { createContextZipBase64, getContextZipFileName } from './zip-service';
 import { getExportNodesByIds, SelectionError } from './selection-service';
 
 export class ExportError extends ExportLikeError {
@@ -17,8 +16,8 @@ export class ExportError extends ExportLikeError {
 }
 
 export interface ExportResult {
-  zipBase64: string;
-  zipFileName: string;
+  folderName: string;
+  files: ContextPackage['files'];
   design: ParsedDesign;
   summary: ExportSummary;
 }
@@ -69,14 +68,11 @@ export async function generateContextPackage(
       throw new ExportError('Export produced no files.', 'EXPORT_EMPTY');
     }
 
-    onProgress?.('Creating download archive', 0.98);
-    const zipBase64 = await createContextZipBase64(contextPackage);
-
-    onProgress?.('Complete', 1);
+    onProgress?.('Preparing files for export', 0.99);
 
     return {
-      zipBase64,
-      zipFileName: getContextZipFileName(contextPackage.folderName),
+      folderName: contextPackage.folderName,
+      files: contextPackage.files,
       design: enrichedDesign,
       summary: {
         screenCount: enrichedDesign.metadata.screenCount,
@@ -84,6 +80,7 @@ export async function generateContextPackage(
         imageCount: enrichedDesign.metadata.imageCount,
         iconCount: enrichedDesign.icons.length,
         exportedAssetCount: assetResult.exportedAssetCount,
+        deduplicatedAssetCount: assetResult.deduplicatedAssetCount,
         skippedAssetCount: assetResult.skippedAssets.length,
         navigationLinkCount: enrichedDesign.navigation.linkCount,
         textElementCount: enrichedDesign.metadata.textElementCount,
