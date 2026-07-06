@@ -7,9 +7,10 @@ import type {
   PluginMessage,
 } from '@/types/messages';
 import {
-  clearActiveExportDirectory,
-  writeExportFile,
-} from '@/ui/utils/folder-export';
+  cancelExportDelivery,
+  deliverExportFile,
+  finalizeExportDelivery,
+} from '@/ui/utils/export-delivery';
 import { usePluginStore } from '@/ui/store/plugin-store';
 
 const FIGMA_ORIGIN = 'https://www.figma.com';
@@ -70,15 +71,13 @@ export function usePluginMessaging(): void {
         case 'EXPORT_FILE':
           if (isExportFilePayload(message.payload)) {
             try {
-              await writeExportFile(message.payload);
+              await deliverExportFile(message.payload);
             } catch (error) {
-              clearActiveExportDirectory();
+              cancelExportDelivery();
               setError({
                 code: 'EXPORT_WRITE_FAILED',
                 message:
-                  error instanceof Error
-                    ? error.message
-                    : 'Failed to write export files to the selected folder.',
+                  error instanceof Error ? error.message : 'Failed to write export files.',
                 details: error instanceof Error ? error.stack ?? error.message : String(error),
               });
             }
@@ -91,14 +90,27 @@ export function usePluginMessaging(): void {
             'folderName' in message.payload &&
             'fileCount' in message.payload
           ) {
-            setSuccess(message.payload.summary);
-            clearActiveExportDirectory();
+            try {
+              setProgress('Preparing download…', 0.995);
+              await finalizeExportDelivery(message.payload.folderName);
+              setSuccess(message.payload.summary);
+            } catch (error) {
+              cancelExportDelivery();
+              setError({
+                code: 'EXPORT_DOWNLOAD_FAILED',
+                message:
+                  error instanceof Error
+                    ? error.message
+                    : 'Failed to prepare the context package download.',
+                details: error instanceof Error ? error.stack ?? error.message : String(error),
+              });
+            }
           }
           break;
         case 'GENERATE_ERROR':
           if (isGenerateErrorPayload(message.payload)) {
             console.error('[OpenContext UI] Export failed\n', message.payload.details);
-            clearActiveExportDirectory();
+            cancelExportDelivery();
             setError(message.payload);
           }
           break;

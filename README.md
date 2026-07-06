@@ -90,7 +90,7 @@ pnpm format
 4. Open the plugin and check the screens you want to export
 5. Enter a project name and click **Generate Context**
 
-The plugin writes a `context/` folder to a directory you choose (no zip archive).
+The plugin exports a `context/` package. In Figma desktop it downloads `context.zip` automatically (folder picker is not available inside the plugin UI). Files are streamed incrementally to keep exports fast and reliable.
 
 ## Architecture
 

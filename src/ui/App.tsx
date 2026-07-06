@@ -6,11 +6,7 @@ import {
   requestScreenListRefresh,
 } from '@/hooks/usePluginMessaging';
 import { createMessage } from '@/types/messages';
-import {
-  isFolderExportSupported,
-  requestExportDirectory,
-  setActiveExportDirectory,
-} from '@/ui/utils/folder-export';
+import { beginExportDelivery } from '@/ui/utils/export-delivery';
 import './styles.css';
 
 function formatScreenType(type: string): string {
@@ -207,19 +203,12 @@ export function App() {
     selectedScreenCount > 0 && projectName.trim().length > 0 && !isGenerating;
 
   const handleGenerate = async () => {
-    if (!isFolderExportSupported()) {
-      usePluginStore.getState().setError({
-        code: 'FOLDER_EXPORT_UNSUPPORTED',
-        message: 'Folder export is not supported in this environment.',
-        details: 'Use Figma desktop (Chromium) to pick an export directory.',
-      });
-      return;
-    }
-
     try {
-      const directoryHandle = await requestExportDirectory();
-      setActiveExportDirectory(directoryHandle);
+      const mode = await beginExportDelivery();
       setLoading();
+      if (mode === 'zip') {
+        usePluginStore.getState().setProgress('Exporting context package…', 0);
+      }
       postPluginMessage(
         createMessage('GENERATE_CONTEXT', {
           projectName: projectName.trim(),
@@ -233,8 +222,8 @@ export function App() {
       }
 
       usePluginStore.getState().setError({
-        code: 'EXPORT_DIRECTORY_FAILED',
-        message: 'Could not open export directory.',
+        code: 'EXPORT_START_FAILED',
+        message: 'Could not start export.',
         details: error instanceof Error ? error.message : String(error),
       });
     }
@@ -307,8 +296,8 @@ export function App() {
       </main>
 
       <footer className="footer">
-        Exports a <code>context/</code> folder to the directory you choose, with README, JSON,
-        navigation links, and assets.
+        Exports a <code>context/</code> folder when your browser allows it, otherwise downloads{' '}
+        <code>context.zip</code>.
       </footer>
     </div>
   );
