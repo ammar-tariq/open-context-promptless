@@ -111,18 +111,7 @@ export async function exportDesignAssets(
       }
 
       report(`Exporting icon PNG ${completedSteps + 1} of ${totalSteps || 1}`);
-      const rasterExport = await exportCroppedRaster(
-        {
-          ...candidate,
-          reference: {
-            ...candidate.reference,
-            name: `${candidate.reference.name}-icon`,
-          },
-        },
-        usedFileNames,
-        skippedAssets,
-        'png',
-      );
+      const rasterExport = await exportCroppedRaster(candidate, usedFileNames, skippedAssets);
       if (rasterExport) {
         exported.files.push(rasterExport.file);
         exported.rasterPath = rasterExport.exportPath;
@@ -256,10 +245,16 @@ async function buildDedupGroups(candidates: ExportCandidate[]): Promise<DedupGro
 
 async function resolveDedupKey(candidate: ExportCandidate): Promise<string> {
   if (candidate.kind === 'image') {
-    if (candidate.reference.hash) {
-      return `image-hash:${candidate.reference.hash}`;
-    }
+    // Each node applies its own crop/transform — never dedupe image fills by hash alone.
     return `image-node:${candidate.nodeId}`;
+  }
+
+  if (candidate.reference.role === 'icon-composite') {
+    return `icon-composite:${candidate.nodeId}`;
+  }
+
+  if (candidate.reference.role === 'decorative') {
+    return `decorative-node:${candidate.nodeId}`;
   }
 
   const node = await figma.getNodeByIdAsync(candidate.nodeId);
@@ -316,7 +311,7 @@ async function exportCroppedRaster(
     return null;
   }
 
-  const fileName = createUniqueAssetFileName(candidate.reference.name, forcedExtension, usedFileNames);
+  const fileName = createUniqueAssetFileName(candidate, forcedExtension, usedFileNames);
   const exportPath = `${ASSET_IMAGE_DIR}/${fileName}`;
 
   return {
@@ -353,7 +348,7 @@ async function exportIconSvg(
     return null;
   }
 
-  const fileName = createUniqueAssetFileName(candidate.reference.name, 'svg', usedFileNames);
+  const fileName = createUniqueAssetFileName(candidate, 'svg', usedFileNames);
   const exportPath = `${ASSET_ICON_DIR}/${fileName}`;
 
   return {
@@ -370,11 +365,6 @@ async function exportNodeRaster(
   candidate: ExportCandidate,
   skippedAssets: SkippedAssetExport[],
 ): Promise<Uint8Array | null> {
-  const hashBytes = await exportImageHashBytes(candidate.reference.hash);
-  if (hashBytes) {
-    return hashBytes;
-  }
-
   const node = await resolveExportNode(candidate.nodeId);
   if (!node || !('exportAsync' in node)) {
     recordSkippedAsset(skippedAssets, candidate, 'Node is missing or cannot be exported.');
@@ -387,6 +377,7 @@ async function exportNodeRaster(
   }
 
   try {
+    // Always export the rendered node — preserves IMAGE fill crop, opacity, effects, and bounds.
     return await node.exportAsync({
       format: 'PNG',
       constraint: { type: 'SCALE', value: RASTER_EXPORT_SCALE },
@@ -412,24 +403,6 @@ function hasNonZeroBounds(node: SceneNode): boolean {
   }
 
   return node.width > 0.01 && node.height > 0.01;
-}
-
-async function exportImageHashBytes(imageHash?: string): Promise<Uint8Array | null> {
-  if (!imageHash) {
-    return null;
-  }
-
-  try {
-    const image = figma.getImageByHash(imageHash);
-    if (!image) {
-      return null;
-    }
-
-    const bytes = await image.getBytesAsync();
-    return bytes.length > 0 ? bytes : null;
-  } catch {
-    return null;
-  }
 }
 
 function recordSkippedAsset(
@@ -458,19 +431,38 @@ function formatExportFailure(error: unknown): string {
 }
 
 function createUniqueAssetFileName(
-  name: string,
+  candidate: ExportCandidate,
   extension: string,
   usedFileNames: Set<string>,
 ): string {
-  const baseName = slugify(name) || 'asset';
-  let fileName = `${baseName}.${extension}`;
-  let suffix = 2;
+  const baseName = slugify(candidate.reference.name) || 'asset';
+  const suffix = assetFileSuffix(candidate);
+  let fileName = suffix ? `${baseName}${suffix}.${extension}` : `${baseName}.${extension}`;
+  let counter = 2;
 
   while (usedFileNames.has(fileName)) {
-    fileName = `${baseName}-${suffix}.${extension}`;
-    suffix += 1;
+    fileName = suffix
+      ? `${baseName}${suffix}-${counter}.${extension}`
+      : `${baseName}-${counter}.${extension}`;
+    counter += 1;
   }
 
   usedFileNames.add(fileName);
   return fileName;
+}
+
+function assetFileSuffix(candidate: ExportCandidate): string {
+  if (candidate.kind === 'image') {
+    return '';
+  }
+
+  if (candidate.reference.role === 'decorative') {
+    return '-decorative';
+  }
+
+  if (candidate.reference.role === 'icon-composite') {
+    return '';
+  }
+
+  return '-icon';
 }

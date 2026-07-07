@@ -2,7 +2,7 @@ import type { AssetManifest, AssetManifestEntry, ScreenAssetsManifest } from '@/
 import type { ParsedDesign } from '@/types';
 
 function inferCategory(path: string): AssetManifestEntry['category'] {
-  if (/ellipse|blob|decoration|decorative|bg-icon/i.test(path)) {
+  if (/ellipse|blob|decoration|decorative|bg-icon|-decorative/i.test(path)) {
     return 'decorative';
   }
 

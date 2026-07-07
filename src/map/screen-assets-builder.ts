@@ -11,7 +11,7 @@ function categorizeAssetPath(path: string): 'decorative' | 'icon' | 'photo' | 'o
     return 'decorative';
   }
 
-  if (/ellipse|blob|glow|decoration|bg-icon|ellipse-/i.test(path)) {
+  if (/ellipse|blob|glow|decoration|decorative|bg-icon|-decorative/i.test(path)) {
     return 'decorative';
   }
 
@@ -82,11 +82,13 @@ export function buildScreenDecorativeManifest(map: ScreenMap): ScreenDecorativeM
       gradient: node.style?.gradient,
       blur: node.style?.blur,
       renderHint:
-        node.viewKind === 'blurView'
-          ? 'Use expo-blur BlurView at map opacity — not a semi-transparent View'
-          : node.viewKind === 'linearGradient'
-            ? 'Use expo-linear-gradient from style.gradient — or exported PNG asset if present'
-            : 'Absolute Image from asset at style.opacity — pointerEvents none — NOT solid backgroundColor',
+        node.asset && node.viewKind === 'blurView'
+          ? 'Prefer exported PNG at style.opacity (blur baked in from Figma) — fallback: expo-blur BlurView'
+          : node.viewKind === 'blurView'
+            ? 'Use expo-blur BlurView at map opacity — not a semi-transparent View'
+            : node.viewKind === 'linearGradient'
+              ? 'Use expo-linear-gradient from style.gradient — or exported PNG asset if present'
+              : 'Absolute Image from asset at style.opacity — pointerEvents none — NOT solid backgroundColor',
     });
   });
 

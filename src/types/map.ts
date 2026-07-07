@@ -99,6 +99,8 @@ export interface MapViewNode {
   text?: MapTextStyle;
   /** PNG path under assets/images/ — primary for React Native exports */
   asset?: string;
+  /** Figma layer size in px — use for Image width/height, NOT the PNG file pixel dimensions */
+  assetDisplay?: { width: number; height: number };
   implementation?: {
     dictionaryRef: string;
     pointerEvents?: 'none' | 'auto';

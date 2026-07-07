@@ -97,6 +97,8 @@ export const ASSETS_AND_QA = `
 ## Assets (React Native — PNG only)
 
 - **Use only** \`assets/images/*.png\` paths from \`screens/{slug}/assets.json\` and \`assets/manifest.json\`.
+- PNGs are **cropped to Figma layer bounds** (2× scale) — use \`placementPixels\` width/height for display size, not the PNG file dimensions.
+- Decorative blobs use \`*-decorative.png\` filenames — render at \`style.opacity\` from \`decorative.json\`.
 - **Do NOT** use \`assets/icons/*.svg\` on React Native — SVG is not exported for the RN target.
 - Copy or \`require()\` PNGs listed in \`assets/registry-scaffold.ts\` (scaffold for your app registry).
 - For decorative blobs: use \`screens/{slug}/decorative.json\` — absolute \`Image\` at \`style.opacity\`, \`pointerEvents: 'none'\`.

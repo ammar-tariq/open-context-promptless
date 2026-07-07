@@ -125,7 +125,7 @@ export interface AssetReference {
   name: string;
   hash?: string;
   format?: string;
-  role?: 'image' | 'icon-vector' | 'icon-raster';
+  role?: 'image' | 'icon-vector' | 'icon-raster' | 'icon-composite' | 'decorative';
   exportPath?: string;
   rasterExportPath?: string;
   mimeType?: string;

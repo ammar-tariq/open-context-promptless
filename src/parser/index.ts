@@ -106,6 +106,8 @@ interface ParseContext {
   iconMap: Map<string, AssetReference>;
   componentMap: Map<string, ComponentSummary>;
   isRoot?: boolean;
+  /** When true, leaf vectors inside a composite export group are skipped */
+  suppressAssetExtraction?: boolean;
 }
 
 async function parseNodeTree(node: SceneNode, context: ParseContext): Promise<ParsedNode> {
@@ -117,10 +119,17 @@ async function parseNodeTree(node: SceneNode, context: ParseContext): Promise<Pa
   }
 
   const children: ParsedNode[] = [];
+  const exportAsComposite = !context.suppressAssetExtraction && isCompositeExportTarget(node);
 
   if ('children' in node) {
     for (const child of node.children) {
-      children.push(await parseNodeTree(child, { ...context, isRoot: false }));
+      children.push(
+        await parseNodeTree(child, {
+          ...context,
+          isRoot: false,
+          suppressAssetExtraction: context.suppressAssetExtraction || exportAsComposite,
+        }),
+      );
     }
   }
 
@@ -145,7 +154,7 @@ async function parseNodeTree(node: SceneNode, context: ParseContext): Promise<Pa
     isInstance: node.type === 'INSTANCE',
     variantProperties: extractVariantProperties(node),
     variables: await extractVariables(node),
-    assets: extractAssets(node, context),
+    assets: context.suppressAssetExtraction ? undefined : extractAssets(node, context, exportAsComposite),
     children,
   };
 }
@@ -625,9 +634,31 @@ async function extractVariables(node: SceneNode): Promise<VariableBinding[] | un
   return bindings.length > 0 ? bindings : undefined;
 }
 
-function extractAssets(node: SceneNode, context: ParseContext): AssetReference[] | undefined {
+function extractAssets(
+  node: SceneNode,
+  context: ParseContext,
+  exportAsComposite = false,
+): AssetReference[] | undefined {
   const assets: AssetReference[] = [];
   const bounds = getBounds(node);
+
+  if (exportAsComposite || isCompositeExportTarget(node)) {
+    if (bounds.width > 0.01 && bounds.height > 0.01) {
+      const composite: AssetReference = {
+        id: node.id,
+        name: node.name,
+        format: 'composite',
+        role: 'icon-composite',
+        width: bounds.width,
+        height: bounds.height,
+        bounds,
+        cropped: true,
+      };
+      context.iconMap.set(node.id, composite);
+      assets.push(composite);
+    }
+    return assets.length > 0 ? assets : undefined;
+  }
 
   if (
     node.type === 'VECTOR' ||
@@ -641,11 +672,17 @@ function extractAssets(node: SceneNode, context: ParseContext): AssetReference[]
       bounds.height <= 128)
   ) {
     if (bounds.width > 0.01 && bounds.height > 0.01) {
+      const opacity = 'opacity' in node ? node.opacity : 1;
+      const isDecorativeEllipse =
+        node.type === 'ELLIPSE' &&
+        opacity < 0.9 &&
+        bounds.width > 40 &&
+        bounds.height > 40;
       const icon: AssetReference = {
         id: node.id,
         name: node.name,
         format: 'vector',
-        role: 'icon-vector',
+        role: isDecorativeEllipse ? 'decorative' : 'icon-vector',
         width: bounds.width,
         height: bounds.height,
         bounds,
@@ -661,25 +698,80 @@ function extractAssets(node: SceneNode, context: ParseContext): AssetReference[]
       if (fill.type !== 'IMAGE' || fill.visible === false) {
         continue;
       }
-        const image: AssetReference = {
-          id: node.id,
-          name: node.name,
-          hash: fill.imageHash ?? undefined,
-          format: 'image',
-          role: 'image',
-          width: bounds.width,
-          height: bounds.height,
-          bounds,
-          cropped: true,
-          scaleMode: String(fill.scaleMode),
-          imageTransform: fill.imageTransform ? serializeTransform(fill.imageTransform) : undefined,
-        };
-        context.imageMap.set(`${node.id}:${fill.imageHash ?? 'image'}`, image);
-        assets.push(image);
+      const image: AssetReference = {
+        id: node.id,
+        name: node.name,
+        hash: fill.imageHash ?? undefined,
+        format: 'image',
+        role: 'image',
+        width: bounds.width,
+        height: bounds.height,
+        bounds,
+        cropped: true,
+        scaleMode: String(fill.scaleMode),
+        imageTransform: fill.imageTransform ? serializeTransform(fill.imageTransform) : undefined,
+      };
+      context.imageMap.set(`${node.id}:${fill.imageHash ?? 'image'}`, image);
+      assets.push(image);
     }
   }
 
   return assets.length > 0 ? assets : undefined;
+}
+
+const COMPOSITE_EXPORT_NAME =
+  /google|facebook|apple|social|login|logo|icon|button|fab|avatar|badge|tab|nav|chevron|arrow|back|menu|bell|profile|calendar|location|search|share|filter|heart|star|combined|union|shape/i;
+
+function isVectorLikeFigmaType(type: string): boolean {
+  return (
+    type === 'VECTOR' ||
+    type === 'BOOLEAN_OPERATION' ||
+    type === 'STAR' ||
+    type === 'LINE' ||
+    type === 'POLYGON' ||
+    type === 'ELLIPSE' ||
+    type === 'RECTANGLE'
+  );
+}
+
+function isCompositeExportTarget(node: SceneNode): boolean {
+  if (!('width' in node) || !('height' in node)) {
+    return false;
+  }
+
+  const width = node.width;
+  const height = node.height;
+  if (width < 0.01 || height < 0.01) {
+    return false;
+  }
+
+  const name = node.name.toLowerCase();
+
+  if (node.type === 'INSTANCE') {
+    return width <= 512 && height <= 512;
+  }
+
+  if (node.type === 'GROUP' || node.type === 'FRAME' || node.type === 'COMPONENT') {
+    if (COMPOSITE_EXPORT_NAME.test(name) && width <= 400 && height <= 160) {
+      return true;
+    }
+
+    if ('children' in node && node.children.length > 0) {
+      const vectorLikeChildren = node.children.filter(
+        (child) => isVectorLikeFigmaType(child.type) || child.type === 'GROUP',
+      );
+      if (
+        vectorLikeChildren.length >= 2 &&
+        vectorLikeChildren.length === node.children.length &&
+        width <= 160 &&
+        height <= 160
+      ) {
+        return true;
+      }
+    }
+  }
+
+  return false;
 }
 
 function serializeTransform(transform: Transform): number[][] {

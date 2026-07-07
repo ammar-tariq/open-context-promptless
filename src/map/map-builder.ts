@@ -167,7 +167,15 @@ function buildViewNode(
     placementPixels,
     ...(style ? { style } : {}),
     ...(text ? { text } : {}),
-    ...(assetPath ? { asset: assetPath } : {}),
+    ...(assetPath
+      ? {
+          asset: assetPath,
+          assetDisplay: {
+            width: Math.round(parsed.bounds.width),
+            height: Math.round(parsed.bounds.height),
+          },
+        }
+      : {}),
     ...(implementation ? { implementation } : {}),
     ...(parsed.layout ? { source: { autoLayout: true } } : {}),
     children,
